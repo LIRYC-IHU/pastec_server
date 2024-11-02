@@ -9,3 +9,7 @@ The central part of this diagram is the PASTEC server.
 
 The PASTEC server is a FastAPI application, running with a MongoDB database. User management rights are handled using a keycloak instance.
 
+
+## Setting up
+You will need to create a keycloak realm called `pastec` with a client called `pastec_server`. This will allow the identification of users on the system.
+
