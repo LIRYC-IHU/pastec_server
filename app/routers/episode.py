@@ -7,8 +7,8 @@ JD 31/10/24
 
 from fastapi import APIRouter, HTTPException, Depends, UploadFile
 from fastapi.responses import JSONResponse, FileResponse
-from app.main import keycloak
-from app.schemas import Episode, EpisodeInfo, Label, LabelInfo
+from keycloak import keycloak
+from schemas import Episode, EpisodeInfo, Label, LabelInfo
 from typing import Optional, List
 
 

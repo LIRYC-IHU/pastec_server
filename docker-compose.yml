@@ -11,12 +11,12 @@ services:
       - keycloak
     environment:
       MONGODB_URI: mongodb://mongodb:27017/mydatabase
-      KEYCLOAK_SERVER_URL: http://keycloak:8080/auth
+      KEYCLOAK_SERVER_URL: http://localhost:8080
+      KEYCLOAK_INTERNAL_SERVER_URL: http://keycloak:8080
       KEYCLOAK_REALM: pastec
       KEYCLOAK_CLIENT_ID: pastec_server
-      KEYCLOAK_CLIENT_SECRET: mysecret 
-    networks:
-      - backend
+      KEYCLOAK_CLIENT_SECRET: dsaImyh0BaQyMiLcaGwhN5ZidUqLz3Lj 
+      KEYCLOAK_ADMIN_CLIENT_SECRET: HWQWR8j2bOoaDDsYk0uboQYpF19Wgt96
 
   mongodb:
     image: mongo:latest
@@ -26,30 +26,22 @@ services:
       - mongo_data:/data/db
     ports:
       - "27017:27017"
-    networks:
-      - backend
 
   keycloak:
     image: quay.io/keycloak/keycloak:latest
     container_name: keycloak
     restart: always
     environment:
-      KEYCLOAK_USER: admin
-      KEYCLOAK_PASSWORD: admin
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
     command:
       - start-dev
-      - "--db=dev-h2"
-      - "--db-url=jdbc:h2:file:/opt/keycloak/data/h2/keycloakdb;AUTO_SERVER=TRUE"
     volumes:
-      - keycloak_data:/opt/keycloak/data/h2
+      - keycloak_data:/opt/keycloak/data
     ports:
       - "8080:8080"
-    networks:
-      - backend
 
 volumes:
   mongo_data:
   keycloak_data:
 
-networks:
-  backend:

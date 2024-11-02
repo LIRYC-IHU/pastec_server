@@ -9,11 +9,13 @@ class TokenData(BaseModel):
 
 
 class User(BaseModel):
-    username: Optional[str] = None
-    token: Optional[str] = None
-    role: Optional[str] = None
-    role_mapping: Optional[List[str]] = None
-
+    id: str
+    username: str
+    email: str
+    first_name: str
+    last_name: str
+    realm_roles: list
+    client_roles: list
 
 class EpisodeInfo(BaseModel):
     patient_id: str
