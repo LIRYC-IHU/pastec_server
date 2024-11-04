@@ -4,15 +4,16 @@ Contains most of the important routes of the application
 
 JD 31/10/24
 """
-
-from fastapi import APIRouter, HTTPException, Depends, UploadFile
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, Body
 from fastapi.responses import JSONResponse, FileResponse
-from keycloak import keycloak
-from schemas import Episode, EpisodeInfo, Label, LabelInfo
-from typing import Optional, List
+from auth import get_user_info, check_role
+from schemas import User
+from db import engine, Episode, Annotation, EpisodeInfo
+from typing import List, Annotated
+from odmantic import ObjectId
 
 
-router = APIRouter('episode')
+router = APIRouter()
 
 
 """
@@ -20,31 +21,46 @@ EPISODE INFO
 """
 
 @router.get("/")
-def list_episodes(manufacturer: Optional[str] = None, episode_type: Optional[str] = None, patient_id: Optional[str] = None, user = Depends(keycloak.get_current_user)) -> List[Episode]:
-    """ List all the episodes that we have, potentially matching some criteria """
-    raise NotImplementedError
-
-    return episodes
-
-
-@router.post("/", status_code=201)
-def post_episode(episode_info: EpisodeInfo, user = Depends(keycloak.get_current_user)) -> Episode:
-    """ Store an episode in the DB """
-    raise NotImplementedError
-
-    if episode_already_exists:
-        return JSONResponse(status_code=409,content=episode)
-    
-    return episode_info
+async def list_episodes(user: Annotated[User, Depends(get_user_info)], 
+                        limit: int = 20
+                        ) -> List[EpisodeInfo]:
+    """
+    List all the episodes that we have, potentially matching some criteria 
+    """
+    # TODO: add filters
+    episodes = await engine.find(Episode, limit=limit)
+    return [EpisodeInfo(**e.model_dump()) for e in episodes]
 
 
-@router.get("/{episode_id}")
-def get_episode_info(episode_id: str, user = Depends(keycloak.get_current_user)) -> Episode:
-    """ Get info about a give episode """
-    raise NotImplementedError
-    if episode_not_found:
-        raise HTTPException(404, detail='No episode with this ID.')
-    return episode
+
+@router.put("/", response_description="Add new episode", response_model=EpisodeInfo, status_code=201, response_model_by_alias=False,)
+async def add_episode(episode: Episode, user: Annotated[User, Depends(get_user_info)]):
+    """
+    Insert a new episode.
+    A unique `id` will be created and provided in the response.
+    """
+    await engine.save(episode)
+    return EpisodeInfo(**episode.model_dump())
+
+
+@router.get("/{id}")
+async def get_episode_by_id(id: ObjectId, user: Annotated[User, Depends(get_user_info)]) -> EpisodeInfo:
+    """ 
+    Get info about a given episode from its `id`
+    """
+    episode = await engine.find_one(Episode, Episode.id == id)
+    if episode is None:
+        raise HTTPException(404, 'Episode not found for this id.')
+    return EpisodeInfo(**episode.model_dump())
+
+
+@router.delete("/{id}", response_model=EpisodeInfo)
+async def delete_episode_by_id(id: ObjectId):
+    episode = await engine.find_one(Episode, Episode.id == id)
+    if episode is None:
+        raise HTTPException(404, 'Episode not found for this id.')
+    await engine.delete(episode)
+    return EpisodeInfo(**episode.model_dump())
 
 
 """ 
@@ -52,7 +68,7 @@ EPISODE EGM
 """
 
 @router.get("/{episode_id}/egm")
-def get_episode_egm(episode_id: str, user = Depends(keycloak.get_current_user)) -> FileResponse:
+async def get_episode_egm(episode_id: str, user: Annotated[User, Depends(get_user_info)]) -> FileResponse:
     """ Get egm of the episode """
     raise NotImplementedError
     if episode_not_found:
@@ -65,7 +81,7 @@ def get_episode_egm(episode_id: str, user = Depends(keycloak.get_current_user)) 
 
 
 @router.post("/{episode_id}/egm", status_code=201)
-def post_episode_egm(episode_id: str, egm: UploadFile, user = Depends(keycloak.get_current_user)):
+def post_episode_egm(episode_id: ObjectId, egm: UploadFile, user: Annotated[User, Depends(get_user_info)]):
     """ Store EGM of the episode """
     raise NotImplementedError
     if episode_not_found:
@@ -77,23 +93,9 @@ def post_episode_egm(episode_id: str, egm: UploadFile, user = Depends(keycloak.g
     return egm_id
 
 
-"""
-EPISODE LABELS
-"""
-
-@router.get("/{episode_id}/labels")
-def get_episode_labels(episode_id: str, user = Depends(keycloak.get_current_user)) -> List[Label]:
-    """ Get labels of a given episode """
-    raise NotImplementedError
-    if episode_not_found:
-        raise HTTPException(404, detail='No episode with this ID.')
-    
-    return labels
-
-
-@router.post("/{episode_id}/label")
-def post_episode_label(episode_id: str, label: LabelInfo, user = Depends(keycloak.get_current_user)) -> str:
-    """ Get labels of a given episode """
+@router.post("/{episode_id}/annotation")
+def post_episode_label(episode_id: ObjectId, annotation: Annotation, user: Annotated[User, Depends(get_user_info)]) -> str:
+    """ Save a new annotation for an episode """
     raise NotImplementedError
     if episode_not_found:
         raise HTTPException(404, detail='No episode with this ID.')

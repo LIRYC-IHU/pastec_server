@@ -8,6 +8,9 @@ from fastapi import FastAPI,Depends
 from schemas import User
 from auth import get_user_info
 from typing import Annotated
+from routers import episode, user
+from contextlib import asynccontextmanager
+
 
 app = FastAPI(
     title='PASTEC Server',
@@ -18,11 +21,18 @@ app = FastAPI(
         'clientId': "pastec_server",
     })
 
+# Routers for users & episode management
+app.include_router(user.router, prefix='/user', tags=['User management'])
+app.include_router(episode.router, prefix='/episode', tags=['Episode management'])
+
+# Example public route
 @app.get("/")
 async def root():
     return {"message": "Hello World"}
 
+# Example secure route
 @app.get("/secure")
-async def root(user: User = Depends(get_user_info)):
+async def root(user: Annotated[User, Depends(get_user_info)]):
     return user.model_dump()
+
 

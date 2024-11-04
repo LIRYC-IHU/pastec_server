@@ -4,9 +4,13 @@ Settings file
 JD 31/10/24
 """
 import os
+import logging
+
+logger = logging.getLogger('uvicorn.error')
 
 # MongoDB Configuration
 MONGODB_URI = os.getenv('MONGODB_URI', 'mongodb://localhost:27017/mydatabase')
+MONGODB_DB_NAME = os.getenv('MONGODB_DB_NAME', 'pastec')
 
 # Keycloak Configuration
 KEYCLOAK_SERVER_URL = os.getenv('KEYCLOAK_SERVER_URL')
