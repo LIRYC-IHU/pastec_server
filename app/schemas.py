@@ -1,6 +1,7 @@
-from pydantic import BaseModel
-from typing import List, Optional, Dict, Any
+from pydantic import BaseModel, ConfigDict, BeforeValidator, Field, PrivateAttr
+from typing import List, Optional, Dict, Any, Annotated
 
+PyObjectId = Annotated[str, BeforeValidator(str)]
 
 class TokenData(BaseModel):
     username: Optional[str] = None
@@ -17,24 +18,33 @@ class User(BaseModel):
     realm_roles: list
     client_roles: list
 
-class EpisodeInfo(BaseModel):
-    patient_id: str
-    manufacturer: str
-    episode_type: str
+
+class Episode(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True, 
+        arbitrary_types_allowed=True,
+        json_schema_extra={"example": { "patient_id": "1234", "manufacturer": "Biotronik", "episode_type": "NSVT"}}
+        )
+
+    id: Optional[PyObjectId] = Field(alias="_id", default=None)
+    patient_id: str = Field(...)
+    manufacturer: str = Field(...)
+    episode_type: str = Field(...)
+    _db_collection: str = PrivateAttr('episodes')
 
 
-class Episode(EpisodeInfo):
-    episode_id: str
-    egm_id: Optional[str]
-
-
-class LabelInfo(BaseModel):
-    user: str
-    user_role: str
-    date_time: str
-    value: str
+class Label(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True, 
+        arbitrary_types_allowed=True,
+        json_schema_extra={"example": { "episode_id": "1234", "user_id": "josselin", "user_role": "md", "value": "AF"}}
+        )
+    
+    id: Optional[PyObjectId] = Field(alias="_id", default=None)
+    episode_id: str = Field(...)
+    user_id: str = Field(...)
+    user_role: str = Field(...)
+    value: str = Field(...)
     details: Optional[Dict[str, Any]]
+    _db_collection: str = PrivateAttr('labels')
 
-class Label(LabelInfo):
-    label_id: str
-    episode_id: str
