@@ -54,8 +54,13 @@ async def get_episode_by_id(id: ObjectId, user: Annotated[User, Depends(get_user
     return EpisodeInfo(**episode.model_dump())
 
 
+<<<<<<< HEAD
 @router.delete("/{id}")
 async def delete_episode_by_id(id: ObjectId, user: Annotated[User, Depends(get_user_info)]) -> EpisodeInfo:
+=======
+@router.delete("/{id}", response_model=EpisodeInfo)
+async def delete_episode_by_id(id: ObjectId):
+>>>>>>> 3c9b8fa6d5efe8410a454529a9371c2ed1265653
     episode = await engine.find_one(Episode, Episode.id == id)
     if episode is None:
         raise HTTPException(404, 'Episode not found for this id.')
