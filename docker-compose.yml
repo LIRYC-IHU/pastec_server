@@ -11,6 +11,7 @@ services:
       - keycloak
     environment:
       MONGODB_URI: mongodb://mongodb:27017/mydatabase
+      MONGODB_DB_NAME: pastec
       KEYCLOAK_SERVER_URL: http://localhost:8080
       KEYCLOAK_INTERNAL_SERVER_URL: http://keycloak:8080
       KEYCLOAK_REALM: pastec
