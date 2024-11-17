@@ -1,0 +1,26 @@
+"""
+Settings file
+
+JD 31/10/24
+"""
+import os
+import logging
+
+logger = logging.getLogger('uvicorn.error')
+
+# MongoDB Configuration
+MONGODB_URI = os.getenv('MONGODB_URI', 'mongodb://localhost:27017/mydatabase')
+MONGODB_DB_NAME = os.getenv('MONGODB_DB_NAME', 'pastec')
+
+# Keycloak Configuration
+KEYCLOAK_SERVER_URL = os.getenv('KEYCLOAK_SERVER_URL')
+KEYCLOAK_INTERNAL_SERVER_URL = os.getenv('KEYCLOAK_INTERNAL_SERVER_URL')
+KEYCLOAK_REALM = os.getenv('KEYCLOAK_REALM')
+KEYCLOAK_CLIENT_ID = os.getenv('KEYCLOAK_CLIENT_ID')
+KEYCLOAK_CLIENT_SECRET = os.getenv('KEYCLOAK_CLIENT_SECRET') 
+KEYCLOAK_ADMIN_CLIENT_SECRET = os.getenv('KEYCLOAK_ADMIN_CLIENT_SECRET') 
+
+KEYCLOAK_OPENID_CONNECT_URL = f'{KEYCLOAK_SERVER_URL}/realms/{KEYCLOAK_REALM}/.well-known/openid-configuration/'
+KEYCLOAK_TOKEN_URL = f'{KEYCLOAK_SERVER_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/token/'
+KEYCLOAK_AUTH_URL = f'{KEYCLOAK_SERVER_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/auth/'
+KEYCLOAK_INTERNAL_REALM_URL = f'{KEYCLOAK_INTERNAL_SERVER_URL}/realms/{KEYCLOAK_REALM}/'

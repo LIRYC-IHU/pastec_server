@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  fastapi-app:
+    container_name: fastapi 
+    build: ./app
+    working_dir: /app
+    restart: always
+    ports:
+      - 8000:8000
+    depends_on:
+      - mongodb
+      - keycloak
+    environment:
+      DEBUG: 1
+      MONGODB_URI: mongodb://mongodb:27017/pastec_db
+      MONGODB_DB_NAME: pastec_db
+      KEYCLOAK_SERVER_URL: http://localhost:8080
+      KEYCLOAK_INTERNAL_SERVER_URL: http://keycloak:8080
+      KEYCLOAK_REALM: pastec
+      KEYCLOAK_CLIENT_ID: pastec_server
+      KEYCLOAK_CLIENT_ID_NUM: 367abfaa-b91c-44d9-9b39-a87bb05e03ab
+      KEYCLOAK_CLIENT_SECRET: dsaImyh0BaQyMiLcaGwhN5ZidUqLz3Lj 
+      KEYCLOAK_ADMIN_CLIENT_SECRET: HWQWR8j2bOoaDDsYk0uboQYpF19Wgt96
+    volumes:
+      - ./app:/app
+
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb
+    environment:
+      MONGO_INITDB_DATABASE: pastec_db
+    restart: always
+    volumes:
+      - mongo_data:/data/db
+    ports:
+      - "27017:27017"
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:latest
+    container_name: keycloak
+    restart: always
+    environment:
+      KEYCLOAK_ADMIN: pastec-admin
+      KEYCLOAK_ADMIN_PASSWORD: test
+      KC_IMPORT_FILES_LOCATION: /opt/keycloak/data/import
+    command:
+      - start-dev
+      - --import-realm
+    volumes:
+      - keycloak_data:/opt/keycloak/data
+      - ./keycloak/config:/opt/keycloak/data/import
+      - ./keycloak/themes:/opt/keycloak/themes/custom
+    ports:
+      - "8080:8080"
+
+volumes:
+  mongo_data:
+  keycloak_data:
+
