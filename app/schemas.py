@@ -8,7 +8,6 @@ class TokenData(BaseModel):
     token: Optional[str] = None
     role: str
 
-
 class User(BaseModel):
     id: str
     username: str
@@ -17,7 +16,6 @@ class User(BaseModel):
     last_name: str
     realm_roles: list
     client_roles: list
-
 
 class Episode(BaseModel):
     model_config = ConfigDict(
@@ -31,7 +29,6 @@ class Episode(BaseModel):
     manufacturer: str = Field(...)
     episode_type: str = Field(...)
     _db_collection: str = PrivateAttr('episodes')
-
 
 class Label(BaseModel):
     model_config = ConfigDict(
