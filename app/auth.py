@@ -11,6 +11,7 @@ keycloak_openid = KeycloakOpenID(
     server_url=KEYCLOAK_INTERNAL_SERVER_URL,
     client_id=KEYCLOAK_CLIENT_ID,
     realm_name=KEYCLOAK_REALM,
+    client_secret_key=KEYCLOAK_CLIENT_SECRET,
     verify=True
 )
 
@@ -86,3 +87,20 @@ def check_role(role: str):
             headers={"WWW-Authenticate": "Bearer"},
         )
     return _check_role
+
+# handle login from keycloak
+
+async def get_token_with_credentials(username: str, password: str) -> dict:
+    try:
+        token = keycloak_openid.token(
+            username=username,
+            password=password,
+            grant_type=["password"]
+        )
+        return token
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Échec de l'authentification: {str(e)}",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
