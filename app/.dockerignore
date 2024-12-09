@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+*.egg
+*.egg-info/
+.eggs/
+.pytest_cache/
+
+# Environnements virtuels
+.env
+.venv
+env/
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+
+# Documentation
+docs/
+*.md
+*.drawio
+*.svg
+*.xml
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.docker/
+
+# Tests
+tests/
+test_*.py
+*_test.py
+
+# Divers
+.DS_Store
+*.bak
+*.tmp 
