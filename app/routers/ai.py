@@ -181,6 +181,8 @@ async def add_ai_annotation(
         
         # Mettre à jour le statut du job
         job.status = JobStatus.COMPLETED
+        job.updated_at = datetime.utcnow()
+        job.annotation = new_annotation
         await engine.save(job)
         
         logger.info(f"Annotation ajoutée avec succès pour le job {job_id}")
@@ -202,3 +204,47 @@ async def add_ai_annotation(
         logger.error(f"Erreur lors de l'ajout de l'annotation pour le job {job_id}: {str(e)}")
         logger.exception("Traceback complet:")
         raise HTTPException(500, detail=f"Error adding annotation: {str(e)}")
+
+# Route pour interroger les jobs en attente
+
+@ai_router.get("/jobs")
+async def get_job_status(
+    job_id: str,
+    user_info: User = Depends(get_user_info)
+) -> JSONResponse:
+    logger.info(f"Requête reçue pour obtenir le statut du job {job_id} par l'utilisateur {user_info.username}")
+    
+    try:
+        # Rechercher le job par son ID
+        job = await engine.find_one(Job, Job.job_id == job_id)
+        if not job:
+            raise HTTPException(404, detail='No job with this ID.')
+        
+        logger.info(f"Job trouvé avec succès pour l'ID {job_id}")
+        
+        if job.status != JobStatus.COMPLETED:
+            logger.info(f"Le job {job_id} n'est pas terminé")
+            return JSONResponse(
+                status_code=202,
+                content={
+                    "status": job.status,
+                    "updated_at": job.updated_at
+                }
+            )
+        else:
+            logger.info(f"Le job {job_id} est terminé et a renvoyé le résultat {job.annotation}")
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "job_id": job.job_id,
+                    "episode_id": job.episode_id,
+                    "model_name": job.model_name,
+                    "status": job.status,
+                    "created_at": job.created_at,
+                    "updated_at": job.updated_at
+                }
+            )
+        
+    except Exception as e:
+        logger.error(f"Erreur lors de la récupération du statut du job {job_id}: {str(e)}")
+        raise HTTPException(500, detail=f"Error getting job status: {str(e)}")
