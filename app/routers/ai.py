@@ -199,8 +199,9 @@ async def get_job_status(
             return JSONResponse(
                 status_code=202,
                 content={
+                    "id_model": job.id_model,
                     "status": job.status,
-                    "updated_at": job.updated_at
+                    "updated_at": str(job.updated_at)
                 }
             )
         else:
@@ -209,11 +210,11 @@ async def get_job_status(
                 status_code=200,
                 content={
                     "job_id": job.job_id,
-                    "episode_id": job.episode_id,
+                    "job_annotation": job.annotation,
                     "id_model": job.id_model,
                     "status": job.status,
-                    "created_at": job.created_at,
-                    "updated_at": job.updated_at
+                    "created_at": str(job.created_at),
+                    "updated_at": str(job.updated_at)
                 }
             )
         

@@ -74,6 +74,8 @@ async def upload_episode(
     logger.info(f"Tentative d'upload avec les paramètres: patient_id={patient_id}, manufacturer={manufacturer}, episode_type={episode_type}, age_at_episode={age_at_episode}, episode_duration={episode_duration}, episode_id={episode_id}")
     
     try:
+        
+        jobs = []
         # Vérifier les utilisateurs IA disponibles
         keycloak_service = KeycloakService()
         ai_client_list = await keycloak_service.get_ai_clients(manufacturer, episode_type)
@@ -92,7 +94,8 @@ async def upload_episode(
             logger.info(f"Modèles IA disponibles: {ai_clients}")
             logger.info("Envoi des requêtes vers le serveur IA")
             for ai_client in ai_clients:
-                job_id = str(ObjectId())  # Utiliser un ObjectId valide
+                job_id = str(ObjectId())# Utiliser un ObjectId valide
+                jobs.append(job_id)
                 logger.info(f"Envoi de la requête au serveur IA pour le modèle {ai_client} avec job_id: {job_id}")
                 # Envoyer l'EGM à l'IA
                 async with httpx.AsyncClient() as client:
@@ -139,7 +142,8 @@ async def upload_episode(
                     "labels": labels,
                     "exists": True,  # Indicateur pour le frontend
                     "ai_available": ai_available,
-                    "ai_clients": ai_clients if ai_available else []
+                    "ai_clients": ai_clients if ai_available else [],
+                    "jobs": jobs if jobs else []
                 }
             )
 
@@ -174,7 +178,8 @@ async def upload_episode(
                 "labels": labels,
                 "exists": False,
                 "ai_available": ai_available,
-                "ai_clients": ai_clients if ai_available else []
+                "ai_clients": ai_clients if ai_available else [],
+                "jobs": jobs if jobs else []
             }
         )
     except Exception as e:
