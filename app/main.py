@@ -8,6 +8,7 @@ from fastapi import FastAPI,Depends
 from fastapi.security import OAuth2AuthorizationCodeBearer
 from fastapi.openapi.models import OAuthFlows as OAuthFlowsModel
 from schemas import User
+from db import Episode
 from auth import get_user_info
 from typing import Annotated
 from routers.episode import episode_router, egm_router, annotation_router
@@ -39,9 +40,23 @@ async def lifespan(app: FastAPI):
         await engine.admin.command('ping')
         logger.info("Connexion MongoDB établie")
         await init_diagnoses(engine)
+        
+        # Afficher les informations sur le modèle Episode
+        logger.info(f"Structure du modèle Episode: {Episode.__fields__}")
+        
+        # Vérifier les collections existantes - CORRECTION ICI
+        db = engine.get_database(MONGODB_DB_NAME)
+        collections = await db.list_collection_names()
+        logger.info(f"Collections disponibles: {collections}")
+        
+        # Afficher les routes
+        logger.info("Routes enregistrées:")
+        for route in app.routes:
+            logger.info(f"{route.path} [{route.methods}]")
+            
     except Exception as e:
-        logger.error(f"Erreur de connexion MongoDB: {str(e)}")
-        # On continue quand même le démarrage de l'application
+        logger.error(f"Erreur lors du démarrage: {str(e)}")
+        raise e
     yield
 
 app = FastAPI(
@@ -51,8 +66,7 @@ app = FastAPI(
     version='0.1',
     swagger_ui_init_oauth={
         'usePkceWithAuthorizationCodeGrant': True,
-        'clientId': "pastec_server",
-        'redirect_uri': 'http://localhost:8000/docs/oauth2-redirect'
+        'clientId': "pastec_server"
     })
 
 # Configuration des origines autorisées

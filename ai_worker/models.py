@@ -9,12 +9,12 @@ import logging
 logger = logging.getLogger(__name__)
 
 class TaskData(BaseModel):
-    model_name: str
+    id_model: str  # Remplacez id_model par id_model
     job_id: str
 
 class AIJob(BaseModel):
     job_id: str
-    model_name: str
+    id_model: str
     annotation: str
     confidence: Optional[float]
     details: Optional[Dict]
@@ -47,10 +47,10 @@ class ModelRegistry:
         except Exception as e:
             logger.error(f"Erreur lors du listage des modèles: {str(e)}", exc_info=True)
     
-    async def run_inference(self, model_name: str, egm_data: bytes) -> Dict:
+    async def run_inference(self, id_model: str, egm_data: bytes) -> Dict:
         """Exécute l'inférence sur un modèle spécifique"""
-        if model_name not in self._models:
-            raise ValueError(f"Modèle {model_name} non trouvé")
+        if id_model not in self._models:
+            raise ValueError(f"Modèle {id_model} non trouvé")
             
-        model_info = self._models[model_name]
-        return await model_info["inference_fn"](egm_data) 
+        model_info = self._models[id_model]
+        return await model_info["inference_fn"](egm_data)

@@ -5,7 +5,6 @@ Contains most of the important routes of the application
 JD 31/10/24
 """
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, Body, Form, File
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, Body, Form, File
 from fastapi.responses import JSONResponse, FileResponse
 from auth import get_user_info, get_auth_info, check_role, get_ai_model_info
 import httpx
@@ -28,8 +27,6 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
-
-
 
 # Router principal pour les épisodes
 episode_router = APIRouter(
@@ -102,7 +99,7 @@ async def upload_episode(
                     response = await client.post(
                         f"{AI_WORKER_URL}/process/{job_id}",
                         json={
-                            "model_name": ai_client,
+                            "id_model": ai_client,
                             "job_id": job_id
                         }
                     )
@@ -112,7 +109,7 @@ async def upload_episode(
                         await engine.save(Job(
                             job_id=job_id,
                             episode_id=episode_id,
-                            model_name=ai_client,
+                            id_model=ai_client,
                             status=JobStatus.PENDING,
                             created_at=datetime.utcnow(),
                             updated_at=datetime.utcnow(),
@@ -306,7 +303,7 @@ async def post_episode_egm(
                 status_code=201,
                 content={"message": "EGM stored successfully"}
             )
-            
+
         except Exception as read_error:
             logger.error(f"Erreur lors de la lecture du fichier: {str(read_error)}")
             logger.exception("Traceback de l'erreur de lecture:")
@@ -359,6 +356,7 @@ async def put_episode_annotation(
                 label=label,
                 details=details
             )
+        
         
         # Ajouter l'annotation à la liste des annotations de l'épisode
         episode.annotations.append(new_annotation)

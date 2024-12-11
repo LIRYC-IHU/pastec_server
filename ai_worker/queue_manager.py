@@ -17,10 +17,10 @@ class AITaskQueue:
         self.model_registry = ModelRegistry()
         self.is_processing = False
         
-    async def add_task(self, model_name: str, job_id: str) -> None:
+    async def add_task(self, id_model: str, job_id: str) -> None:
         """Ajoute une tâche à la queue"""
-        await self.queue.put(TaskData(model_name=model_name, job_id=job_id))
-        logger.info(f"Tâche ajoutée à la queue: {model_name, job_id}")
+        await self.queue.put(TaskData(id_model=id_model, job_id=job_id))
+        logger.info(f"Tâche ajoutée à la queue: {id_model, job_id}")
         
         if not self.is_processing:
             create_task(self.process_queue())
@@ -42,31 +42,31 @@ class AITaskQueue:
 
     async def _process_task(self, task: TaskData) -> None:
         """Traite une tâche individuelle"""
-        model_name = task.model_name
+        id_model = task.id_model
         job_id = task.job_id
         
-        logger.info(f"Traitement de la tâche: {job_id, model_name}")
+        logger.info(f"Traitement de la tâche: {job_id, id_model}")
         
         try:
             
             # Récupération de l'EGM
-            egm_data = await self._fetch_egm(job_id, model_name)
+            egm_data = await self._fetch_egm(job_id, id_model)
             
             # Analyse avec le modèle
-            prediction = await self.model_registry.run_inference(model_name, egm_data)
+            prediction = await self.model_registry.run_inference(id_model, egm_data)
             
             # Envoi du résultat
-            await self._submit_annotation(job_id, prediction, model_name)
+            await self._submit_annotation(job_id, prediction, id_model)
             
             
         except Exception as e:
             logger.error(f"Erreur lors du traitement: {str(e)}")
     
 
-    async def _fetch_egm(self, job_id: str, model_name: str) -> bytes:
+    async def _fetch_egm(self, job_id: str, id_model: str) -> bytes:
         """Récupère l'EGM depuis l'API"""
         async with httpx.AsyncClient() as client:
-            token = await get_jwt_token(model_name)
+            token = await get_jwt_token(id_model)
             headers = {'Authorization': f'Bearer {token}'}
             response = await client.get(
                 f"{os.getenv('FASTAPI_URL')}/ai/{job_id}/egm",
@@ -75,7 +75,7 @@ class AITaskQueue:
             if response.status_code == 200:
                 logger.info("requête réussie")
             if response.status_code == 404:
-                logger.warning(f"EGM non trouvé pour job_id: {job_id}, model_name: {model_name}")
+                logger.warning(f"EGM non trouvé pour job_id: {job_id}, id_model: {id_model}")
                 return b""
             response.raise_for_status()
             if response.status_code != 200:
@@ -86,19 +86,19 @@ class AITaskQueue:
         self,
         job_id: str,
         prediction: Dict,
-        model_name: str
+        id_model: str
     ) -> AIJob:
         """Soumet l'annotation à l'API"""
         ai_job = AIJob(
             job_id=job_id,
-            model_name=model_name,
+            id_model=id_model,
             annotation=prediction["prediction"],
             confidence=prediction.get("confidence", 0.0),
             details=prediction.get("details", {})  # Ajout du champ 'details'
         )
         
         async with httpx.AsyncClient() as client:
-            token = await get_jwt_token(model_name)
+            token = await get_jwt_token(id_model)
             headers = {'Authorization': f'Bearer {token}'}
             response = await client.put(
                 f"{os.getenv('FASTAPI_URL')}/ai/{job_id}/annotation",

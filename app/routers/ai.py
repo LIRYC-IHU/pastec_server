@@ -4,7 +4,7 @@ from auth import get_auth_info, get_user_info
 from schemas import AIJob, User
 from db import engine, Episode, Annotation, Job, JobStatus, UserType
 from typing import List, Dict, Optional, Annotated
-from schemas import AIJob, User, Episode
+from schemas import AIJob, User
 from odmantic import ObjectId
 from datetime import datetime
 import httpx
@@ -12,6 +12,7 @@ import logging
 from bson.binary import Binary
 from settings import AI_WORKER_URL
 from starlette.background import BackgroundTask
+
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +29,6 @@ async def send_job_to_ai(
     ai_clients: List[str]
 ):
     logger.info(f"Envoi de l'EGM aux modèles IA pour l'épisode {episode_id} par l'utilisateur {user.username}")
-    """Send EGM to AI for analysis"""
-    logger.info(f"Envoi de l'EGM aux modèles IA pour l'épisode {episode_id}")
     
     # Création d'un job pour chaque modèle
     jobs = []
@@ -38,7 +37,7 @@ async def send_job_to_ai(
         job = Job(
             job_id=str(ObjectId()),
             episode_id=episode_id,
-            model_name=ai_user,
+            id_model=ai_user,  # Remplacez id_model par id_model
             status=JobStatus.PENDING,
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow(),
@@ -58,7 +57,7 @@ async def send_job_to_ai(
                 response = await client.post(
                     f"{AI_WORKER_URL}/process/{job_id}",
                     json={
-                        "model_name": ai_user,
+                        "id_model": ai_user,  # Remplacez id_model par id_model
                         "job_id": job_id
                     }
                 ) 
@@ -66,7 +65,7 @@ async def send_job_to_ai(
                     raise Exception(f"Erreur lors de l'envoi à l'IA {ai_user}: {response.text}")
                 jobs.append({
                     "job_id": job_id,
-                    "model_name": ai_user,
+                    "id_model": ai_user,
                     "status": "processing"
                 })
         except Exception as e:
@@ -76,31 +75,17 @@ async def send_job_to_ai(
                 {"_id": ObjectId(job_id)},
                 {"$set": {"status": "failed", "error": str(e)}}
             )
-    
     return {
         "message": "Analysis requests sent",
         "jobs": jobs
     }
 
 @ai_router.get("/{job_id}/egm")
-async def get_egm_from_job(
+async def get_egm(
     job_id: str,
     auth_info: dict = Depends(get_auth_info)
 ) -> FileResponse:
     logger.info(f"Requête reçue pour obtenir l'EGM avec job_id: {job_id} et auth_info: {auth_info}")
-    """
-    Récupère l'EGM d'un épisode spécifique
-    
-    Parameters:
-    - job_id: Identifiant unique du job
-    - user: Utilisateur authentifié (injecté automatiquement)
-    
-    Returns:
-    - FileResponse contenant l'EGM
-    """
-    
-    logger.info(f"Requête reçue par {auth_info['type']}: {auth_info['info']}")
-    
     try:
         # Rechercher le job par son ID dans la collection "jobs"
         job = await engine.find_one(Job, Job.job_id == job_id)
@@ -110,102 +95,89 @@ async def get_egm_from_job(
         if job.status != JobStatus.PENDING:
             logger.error(f"Le job avec l'ID {job_id} n'est pas en statut pending.")
             raise HTTPException(403, detail='No accepted job for this ID.')
-        
-        logger.info(f"found one job with id {job_id}")
-        
-        # Rechercher l'épisode par son ID
-        episode = await engine.find_one(Episode, Episode.episode_id == job.episode_id)
+
+        episode_id = str(job.episode_id)
+        episode = await engine.find_one(Episode, Episode.episode_id == episode_id)
         if not episode:
-            logger.error(f"Aucun épisode trouvé avec l'ID: {job.episode_id}")
+            logger.error(f"Aucun épisode trouvé pour episode_id: {episode_id}")
             raise HTTPException(404, detail='No episode with this ID.')
-        
-        # Vérifier si l'EGM existe
+
         if not hasattr(episode, 'egm') or not episode.egm:
-            logger.warning(f"Aucun EGM stocké pour l'épisode avec l'ID: {job['episode_id']}")
+            logger.warning(f"Aucun EGM stocké pour l'épisode avec l'ID: {episode_id}")
             return JSONResponse(status_code=404, content={"message": "No EGM stored for this episode."})
-        
-        # Créer un fichier temporaire pour stocker l'EGM
+
         temp_file = f"/tmp/{episode.episode_id}.svg"
         with open(temp_file, "wb") as f:
             if isinstance(episode.egm, Binary):
                 f.write(episode.egm)
             else:
-                # Si l'EGM est stocké en base64
                 import base64
                 f.write(base64.b64decode(episode.egm))
-        
-        # Retourner le fichier
+
         return FileResponse(
             path=temp_file,
             filename=f"episode_{episode.episode_id}.svg",
             media_type="image/svg+xml",
             background=BackgroundTask(lambda: os.remove(temp_file))
         )
-        
     except Exception as e:
-        logger.error(f"Erreur lors de la récupération de l'EGM: {str(e)}")
-        raise HTTPException(500, detail=str(e))
+        logger.error(f"Erreur lors de la récupération de l'EGM pour le job {job_id}: {str(e)}")
+        raise HTTPException(500, detail=f"Error getting EGM: {str(e.with_traceback(None))}")
 
 @ai_router.put("/{job_id}/annotation", status_code=200)
-async def add_ai_annotation(
+async def add_ai_annotation_to_db(
     job_id: str,
     auth_info: dict = Depends(get_auth_info),
     ai_job: AIJob = Body(...)
 ) -> JSONResponse:
-    logger.info(f"Tentative d'ajout d'annotation pour le job {job_id} par {auth_info['type']}: {auth_info['info']}")
+    # 1. Récupération du job
+    job = await engine.find_one(Job, Job.job_id == job_id)
+    if not job:
+        raise HTTPException(404, detail='No job with this ID.')
+    if job.status != "pending":
+        raise HTTPException(403, detail='Job is not in pending status.')
     
-    try:
-        # Rechercher le job par son ID
-        job = await engine.find_one(Job, Job.job_id == job_id)
-        if not job:
-            raise HTTPException(404, detail='No job with this ID.')
-        if job.status != "pending":
-            raise HTTPException(403, detail='Job is not in pending status.')
-        
-        # Rechercher l'épisode par son ID
-        episode = await engine.find_one(Episode, Episode.episode_id==job.episode_id)
-        if not episode:
-            raise HTTPException(404, detail='No episode with this ID.')
-        
-        # Créer la nouvelle annotation
-        new_annotation = Annotation(
-            user=ai_job.model_name,
-            user_type=UserType.AI,
-            label=ai_job.annotation,
-            details=ai_job.details
-        )
-        
-        # Ajouter l'annotation à la liste des annotations de l'épisode
-        episode.annotations.append(new_annotation)
-        await engine.save(episode)
-        
-        # Mettre à jour le statut du job
-        job.status = JobStatus.COMPLETED
-        job.updated_at = datetime.utcnow()
-        job.annotation = new_annotation
-        await engine.save(job)
-        
-        logger.info(f"Annotation ajoutée avec succès pour le job {job_id}")
-        return JSONResponse(
-            status_code=200,
-            content={
-                "message": "Annotation added successfully",
-                "job_id": job_id,
-                "annotation": {
-                    "user": new_annotation.user,
-                    "user_type": new_annotation.user_type,
-                    "label": new_annotation.label,
-                    "details": new_annotation.details
-                }
-            }
-        )
-        
-    except Exception as e:
-        logger.error(f"Erreur lors de l'ajout de l'annotation pour le job {job_id}: {str(e)}")
-        logger.exception("Traceback complet:")
-        raise HTTPException(500, detail=f"Error adding annotation: {str(e)}")
-
-# Route pour interroger les jobs en attente
+    # 2. Création de la nouvelle annotation
+    new_annotation = Annotation(
+        user=ai_job.id_model,  # Assurez-vous que id_model est correct
+        user_type=UserType.AI,
+        label=ai_job.annotation,
+        details=ai_job.details
+    )
+    
+    # 3. Recherche de l'épisode lié au job
+    episode = await engine.find_one(Episode, Episode.episode_id == job.episode_id)
+    if not episode:
+        raise HTTPException(404, detail='No episode with this ID.')
+    
+    # 4. Ajout de l'annotation à l'épisode
+    episode.annotations.append(new_annotation)
+    await engine.save(episode)
+    
+    # 5. Mise à jour du job: statut, annotation, etc.
+    job.status = JobStatus.COMPLETED
+    job.updated_at = datetime.utcnow()
+    job.annotation = ai_job.annotation
+    job.confidence = ai_job.confidence
+    job.details = ai_job.details
+    await engine.save(job)
+    logger.info("Job status updated")
+    
+    return JSONResponse(
+        status_code=200,
+        content={
+            "message": "Annotation added successfully",
+            "episode_id": job.episode_id,
+            "annotation": {
+                "user": new_annotation.user,
+                "user_type": new_annotation.user_type,
+                "label": new_annotation.label,
+                "details": new_annotation.details
+            },
+            "job_id": job_id,
+            "status": job.status
+        }
+    ) 
 
 @ai_router.get("/jobs")
 async def get_job_status(
@@ -238,7 +210,7 @@ async def get_job_status(
                 content={
                     "job_id": job.job_id,
                     "episode_id": job.episode_id,
-                    "model_name": job.model_name,
+                    "id_model": job.id_model,
                     "status": job.status,
                     "created_at": job.created_at,
                     "updated_at": job.updated_at

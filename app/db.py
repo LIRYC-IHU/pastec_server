@@ -7,9 +7,7 @@ J Duchateau 04/11/24
 from odmantic import AIOEngine, Field, Model, EmbeddedModel, ObjectId
 from motor.motor_asyncio import AsyncIOMotorClient
 import asyncio
-import asyncio
 from settings import MONGODB_URI, MONGODB_DB_NAME
-from typing import List, Optional, Dict
 from typing import List, Optional, Dict
 from pydantic import BaseModel, computed_field
 from enum import Enum
@@ -46,9 +44,9 @@ class JobStatus(str, Enum):
     FAILED = "failed"
 
 class Job(Model):
-    job_id: str =Field(primary_field=True)
+    job_id: str
     episode_id: str
-    model_name: str
+    id_model: str  
     status: JobStatus
     created_at: datetime.datetime
     updated_at: datetime.datetime
@@ -57,77 +55,30 @@ class Job(Model):
     details: Optional[Dict]
     
     model_config = {
-        "collection": "jobs",
-        "json_schema_extra": {
-            "example": {
-                "job_id": "hash_generated_by_backend",
-                "episode_id": "hash_generated_by_frontend",
-                "model_name": "model_name",
-                "created_at": "2024-11-04T16:00:00",
-                "updated_at": "2024-11-04T16:00:00",
-                "annotation": "AF",
-                "confidence": 0.9,
-                "details": {}
-            }
-        },
-        "arbitrary_types_allowed": True  # Ajout de cette ligne
+        "collection": "jobs"
     }
 
 class Episode(Model):
-    episode_id: str = Field(primary_field=True)  # L'ID généré par le frontend devient l'identifiant principal
-    episode_id: str = Field(primary_field=True)  # L'ID généré par le frontend devient l'identifiant principal
-    patient_id: str = Field(index=True)
+    episode_id: str = Field(...)
+    patient_id: str = Field(...)
     manufacturer: Manufacturer
-    episode_type: str
-    age_at_episode: int
-    episode_duration: int
+    episode_type: str = Field(...)
     age_at_episode: int
     episode_duration: int
     egm: Optional[Binary] = None
     annotations: List[Annotation] = []
     
     model_config = {
-        "collection": "episodes",
-        "json_schema_extra": {
-            "example": {
-                "episode_id": "hash_generated_by_frontend",
-                "patient_id": "patient_hash",
-                "manufacturer": "boston",
-                "episode_type": "AT",
-                "age_at_episode": 65,
-                "episode_duration": 30,
-                "annotations": []
-            }
-        }
+        "collection": "episodes"
     }
-    
-    model_config = {
-        "collection": "episodes",
-        "json_schema_extra": {
-            "example": {
-                "episode_id": "hash_generated_by_frontend",
-                "patient_id": "patient_hash",
-                "manufacturer": "boston",
-                "episode_type": "AT",
-                "age_at_episode": 65,
-                "episode_duration": 30,
-                "annotations": []
-            }
-        }
-    }
-
-    @computed_field
-    @property
-    def num_annotations(self) -> int:
-        return len(self.annotations)
 
 class EpisodeInfo(BaseModel):
-    id: str
     id: str
     patient_id: str = Field(index=True)
     manufacturer: Manufacturer
     episode_type: str
     annotations: List[Annotation] = []
+    
     @computed_field
     @property
     def labels(self) -> List[str]:
@@ -156,4 +107,11 @@ class DiagnosesCollection(Model):
     model_config = {
         "collection": "diagnoses"
     }
+
+class AIJob(BaseModel):
+    job_id: str
+    id_model: str  # Remplacez id_model par id_model
+    annotation: str
+    confidence: Optional[float]
+    details: Optional[Dict]
 

@@ -24,23 +24,10 @@ class AIModel(BaseModel):
 
 class AIJob(BaseModel):
     job_id: str
-    model_name: str
+    id_model: str
     annotation: str
     confidence: Optional[float]
     details: Optional[Dict]
-
-class Episode(BaseModel):
-    model_config = ConfigDict(
-        populate_by_name=True, 
-        arbitrary_types_allowed=True,
-        json_schema_extra={"example": { "patient_id": "1234", "manufacturer": "Biotronik", "episode_type": "NSVT"}}
-        )
-
-    id: Optional[PyObjectId] = Field(alias="_id", default=None)
-    patient_id: str = Field(...)
-    manufacturer: str = Field(...)
-    episode_type: str = Field(...)
-    _db_collection: str = PrivateAttr('episodes')
 
 class Label(BaseModel):
     model_config = ConfigDict(

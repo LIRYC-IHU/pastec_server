@@ -4,6 +4,8 @@ import logging
 from queue_manager import AITaskQueue
 from bson import ObjectId
 import os
+import sys
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from models import TaskData
 
 logging.basicConfig(level=logging.INFO)
@@ -13,12 +15,12 @@ app = FastAPI()
 task_queue = AITaskQueue()
 
 class ProcessRequest(BaseModel):
-    model_name: str
+    id_model: str  # Remplacez id_model par id_model
 
 @app.post("/process/{job_id}", status_code=202)
 async def process(job_id: str, request: ProcessRequest):
     """Ajoute une tâche à la queue"""
-    await task_queue.add_task(request.model_name, job_id)
+    await task_queue.add_task(request.id_model, job_id)  # Remplacez id_model par id_model
     return {"message": "Tâche ajoutée à la queue"}
 
 @app.get("/queue/status")

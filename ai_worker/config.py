@@ -19,6 +19,6 @@ class Config:
     }
     
     @classmethod
-    def get_model_config(cls, model_name: str) -> Dict[str, Any]:
+    def get_model_config(cls, id_model: str) -> Dict[str, Any]:
         """Récupère la configuration d'un modèle"""
-        return cls.MODEL_CONFIG.get(model_name, {}) 
+        return cls.MODEL_CONFIG.get(id_model, {}) 

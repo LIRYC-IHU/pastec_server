@@ -18,15 +18,15 @@ keycloak_openid = KeycloakOpenID(
     server_url=KEYCLOAK_INTERNAL_SERVER_URL,
     client_id=KEYCLOAK_CLIENT_ID,
     realm_name=KEYCLOAK_REALM,
-    client_secret_key=KEYCLOAK_CLIENT_SECRET,
     verify=True,
 )
 
 # Security Schemes
 oauth2_scheme = OAuth2AuthorizationCodeBearer(
     authorizationUrl=KEYCLOAK_AUTH_URL,
-    tokenUrl=KEYCLOAK_TOKEN_URL,
+    tokenUrl=KEYCLOAK_TOKEN_URL
 )
+
 oauth2_scheme_app = OAuth2PasswordBearer(tokenUrl=KEYCLOAK_TOKEN_URL)
 security = HTTPBearer()
 
