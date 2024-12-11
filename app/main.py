@@ -72,6 +72,7 @@ app = FastAPI(
 # Configuration des origines autorisées
 origins = [
     "https://www.latitudenxt.bostonscientific-international.com",
+    "*",
     "http://localhost:8000",  # Pour le développement local
     "http://127.0.0.1:8000",  # Pour le développement local
 ]
@@ -83,6 +84,8 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],  # Autorise toutes les méthodes HTTP
     allow_headers=["*"],  # Autorise tous les headers
+    expose_headers=["*"],
+    max_age=3600# Expose le header Content-Disposition
 )
 
 # Routers for users & episode management
