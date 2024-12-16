@@ -113,6 +113,29 @@ async def get_token_with_credentials(username: str, password: str) -> dict:
         logger.error(f"Authentication failed: {str(e)}")
         raise HTTPException(status_code=401, detail="Authentication failed")
 
+async def get_refresh_token(refresh_token: str) -> dict:
+    try:
+        logger.info("Début du refresh token...")
+        logger.debug(f"Refresh token reçu (tronqué): {refresh_token[:20]}...")
+        
+        # Récupérer le token rafraîchi
+        token_response = keycloak_openid.refresh_token(refresh_token)
+        logger.info("Token rafraîchi avec succès")
+        logger.debug(f"Réponse complète: {token_response}")
+        
+        # Retourner la structure attendue par l'endpoint
+        return {
+            "access_token": token_response.get("access_token"),
+            "refresh_token": token_response.get("refresh_token"),
+            "expires_in": token_response.get("expires_in")
+        }
+        
+    except Exception as e:
+        logger.error(f"Erreur détaillée du refresh token: {str(e)}")
+        raise HTTPException(
+            status_code=401,
+            detail=f"Failed to refresh token: {str(e)}"
+        )
 # Combine User and Application Authentication
 async def get_auth_info(payload: dict = Depends(get_payload)):
     try:

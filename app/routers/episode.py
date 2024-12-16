@@ -67,12 +67,9 @@ async def upload_episode(
     manufacturer: str = Form(...),
     episode_type: str = Form(...),
     age_at_episode: int = Form(...),
-    episode_duration: int = Form(...),  # Correction du type de episode_duration
+    episode_duration: str = Form(...),  # Correction du type de episode_duration
     episode_id: str = Form(...)
 ) -> JSONResponse:
-    logger.info(f"Tentative d'upload avec auth_info: {auth_info}")
-    logger.info(f"Tentative d'upload avec les paramètres: patient_id={patient_id}, manufacturer={manufacturer}, episode_type={episode_type}, age_at_episode={age_at_episode}, episode_duration={episode_duration}, episode_id={episode_id}")
-    
     try:
         
         jobs = []
@@ -125,6 +122,7 @@ async def upload_episode(
     
         # Vérifier si l'épisode existe déjà
         existing_episode = await engine.find_one(Episode, Episode.episode_id == episode_id)
+        
         if existing_episode:
             logger.info(f"Episode {episode_id} déjà existant")
             diagnosis_service = DiagnosisService(engine)
@@ -141,6 +139,7 @@ async def upload_episode(
                     "episode_type": existing_episode.episode_type,
                     "labels": labels,
                     "exists": True,  # Indicateur pour le frontend
+                    "annotated": True if existing_episode.annotations else False,
                     "ai_available": ai_available,
                     "ai_clients": ai_clients if ai_available else [],
                     "jobs": jobs if jobs else []
@@ -155,7 +154,7 @@ async def upload_episode(
             manufacturer=manufacturer_enum,
             episode_type=episode_type,
             age_at_episode=age_at_episode,
-            episode_duration=int(episode_duration),  # Conversion en entier
+            episode_duration=episode_duration,
             annotations=[]
         )
         
@@ -177,6 +176,7 @@ async def upload_episode(
                 "episode_type": episode.episode_type,
                 "labels": labels,
                 "exists": False,
+                "annotated": False,
                 "ai_available": ai_available,
                 "ai_clients": ai_clients if ai_available else [],
                 "jobs": jobs if jobs else []

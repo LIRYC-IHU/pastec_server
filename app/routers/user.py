@@ -1,10 +1,8 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from typing import Annotated
 from schemas import User
 from fastapi import Form
-from auth import get_user_info, get_token_with_credentials
-from fastapi import Form
-from auth import get_user_info, get_token_with_credentials
+from auth import get_user_info, get_token_with_credentials, get_refresh_token
 
 
 user_router = APIRouter(
@@ -29,4 +27,17 @@ async def login(
         "token_type": "bearer",
         "refresh_token": token["refresh_token"]
     }
+
+@user_router.post("/token/refresh")
+async def refresh_token(refresh_token: Annotated[str, Form()]):
+    try:
+        new_token = await get_refresh_token(refresh_token=refresh_token)
+        return {
+            "access_token": new_token["access_token"],
+            "token_type": "bearer",
+            "refresh_token": new_token["refresh_token"],
+            "expires_in": new_token["expires_in"]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="Failed to refresh token")
 

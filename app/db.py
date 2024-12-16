@@ -64,7 +64,7 @@ class Episode(Model):
     manufacturer: Manufacturer
     episode_type: str = Field(...)
     age_at_episode: int
-    episode_duration: int
+    episode_duration: str = Field(...)
     egm: Optional[Binary] = None
     annotations: List[Annotation] = []
     
