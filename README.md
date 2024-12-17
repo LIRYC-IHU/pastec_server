@@ -13,3 +13,16 @@ The PASTEC server is a FastAPI application, running with a MongoDB database. Use
 ## Setting up
 You will need to create a keycloak realm called `pastec` with a client called `pastec_server`. This will allow the identification of users on the system.
 
+App-mediated access operates via Keycloak admin API, and needs to add an admin user, in this test named `pastec-admin`.
+
+# The PASTEC SERVER - FastAPI app
+
+The PASTEC server centralizes frontend authentication, mongoDB entries, and sends tasks to the `AI Worker`server for automatic analysis. It is based on fastAPI, with Pydantic based model validation. Data is stored on a mongoDB dabatase (See below)
+
+## Data models
+
+
+## Main routes
+
+
+

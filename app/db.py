@@ -71,18 +71,6 @@ class Episode(Model):
     model_config = {
         "collection": "episodes"
     }
-
-class EpisodeInfo(BaseModel):
-    id: str
-    patient_id: str = Field(index=True)
-    manufacturer: Manufacturer
-    episode_type: str
-    annotations: List[Annotation] = []
-    
-    @computed_field
-    @property
-    def labels(self) -> List[str]:
-        return [a.label for a in self.annotations]
     
 class Diagnosis(BaseModel):
     """
