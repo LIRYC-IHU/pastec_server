@@ -44,43 +44,55 @@ class AITaskQueue:
         """Traite une tâche individuelle"""
         id_model = task.id_model
         job_id = task.job_id
-        
+
         logger.info(f"Traitement de la tâche: {job_id, id_model}")
-        
+
         try:
-            
             # Récupération de l'EGM
             egm_data = await self._fetch_egm(job_id, id_model)
-            
-            # Analyse avec le modèle
+
+            if not egm_data:
+                raise ValueError(f"Aucune donnée EGM reçue pour job_id: {job_id}")
+
+            # Exécution de l'inférence
             prediction = await self.model_registry.run_inference(id_model, egm_data)
-            
-            # Envoi du résultat
+
+            # Soumission du résultat
             await self._submit_annotation(job_id, prediction, id_model)
-            
-            
+
         except Exception as e:
-            logger.error(f"Erreur lors du traitement: {str(e)}")
+            logger.error(f"Erreur lors du traitement de la tâche {job_id}: {e}")
     
 
     async def _fetch_egm(self, job_id: str, id_model: str) -> bytes:
         """Récupère l'EGM depuis l'API"""
         async with httpx.AsyncClient() as client:
-            token = await get_jwt_token(id_model)
+            key_model_path = f"/ai_worker/private_keys/private_key_{id_model}.pem"
+            token = await get_jwt_token(id_model, key_model_path)
             headers = {'Authorization': f'Bearer {token}'}
-            response = await client.get(
-                f"{os.getenv('FASTAPI_URL')}/ai/{job_id}/egm",
-                headers=headers
-            )
-            if response.status_code == 200:
-                logger.info("requête réussie")
-            if response.status_code == 404:
-                logger.warning(f"EGM non trouvé pour job_id: {job_id}, id_model: {id_model}")
-                return b""
-            response.raise_for_status()
-            if response.status_code != 200:
-                raise ValueError(f"Erreur lors de la récupération de l'EGM: {response.status_code}")
-            return response.content
+
+            try:
+                response = await client.get(
+                    f"{os.getenv('FASTAPI_URL')}/ai/{job_id}/egm",
+                    headers=headers
+                )
+                response.raise_for_status()
+
+                if response.status_code == 200:
+                    logger.info("Requête réussie pour l'EGM.")
+                    return response.content
+
+                if response.status_code == 404:
+                    logger.warning(f"EGM non trouvé pour job_id: {job_id}, id_model: {id_model}")
+                    return b""
+
+            except httpx.RequestError as e:
+                logger.error(f"Erreur réseau lors de la récupération de l'EGM: {e}")
+                raise ValueError("Erreur réseau lors de la récupération de l'EGM")
+
+            except httpx.HTTPStatusError as e:
+                logger.error(f"Erreur HTTP lors de la récupération de l'EGM: {e}")
+                raise ValueError(f"Erreur HTTP {e.response.status_code} lors de la récupération de l'EGM")
 
     async def _submit_annotation(
         self,
@@ -89,16 +101,17 @@ class AITaskQueue:
         id_model: str
     ) -> AIJob:
         """Soumet l'annotation à l'API"""
+        logger.info(f"prediction:{prediction}");
         ai_job = AIJob(
             job_id=job_id,
             id_model=id_model,
-            annotation=prediction["prediction"],
+            annotation=str(prediction["prediction"]),
             confidence=prediction.get("confidence", 0.0),
             details=prediction.get("details", {})  # Ajout du champ 'details'
         )
         
         async with httpx.AsyncClient() as client:
-            token = await get_jwt_token(id_model)
+            token = await get_jwt_token(id_model, pem_path=f"/ai_worker/private_keys/private_key_{id_model}.pem")
             headers = {'Authorization': f'Bearer {token}'}
             response = await client.put(
                 f"{os.getenv('FASTAPI_URL')}/ai/{job_id}/annotation",

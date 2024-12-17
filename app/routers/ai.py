@@ -9,6 +9,7 @@ from odmantic import ObjectId
 from datetime import datetime
 import httpx
 import logging
+import os
 from bson.binary import Binary
 from settings import AI_WORKER_URL
 from starlette.background import BackgroundTask

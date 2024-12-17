@@ -6,24 +6,38 @@ import matplotlib.pyplot as plt
 from tensorflow.keras.models import load_model
 import librosa
 import os
+import soundfile as sf 
+import datetime
 
 logger = logging.getLogger(__name__)
 
 class AIBSCModel:
     def __init__(self):
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        model_path = os.path.join(current_dir, 'AImodel_BSC_AF.h5')
+        model_path = os.path.join(current_dir, 'AImodel_BSC_AF class1.h5')
         
         logger.info(f"Tentative de chargement du modèle depuis: {model_path}")
         self.model = load_model(model_path, compile=False)
         logger.info("AIBSCModel initialisé")
+        try:
+            logger.info("version de libsndfile: " + {sf.__libsndfile_version__})
+        except:
+            logger.error("Impossible de récupérer la version de libsndfile")
 
     async def inference(self, egm_data: bytes) -> dict:
         """Fonction d'inférence pour le modèle AI BSC AF"""
         logger.info("Exécution de l'inférence AI BSC AF")
 
-        # Parse the XML content of the SVG file
-        tree = etree.fromstring(egm_data)
+        # Vérification de la validité de l'entrée
+        if not egm_data or not egm_data.strip():
+            raise ValueError("Données EGM vides ou invalides")
+
+        try:
+            # Analyse du contenu XML
+            tree = etree.fromstring(egm_data)
+        except etree.XMLSyntaxError as e:
+            logger.error(f"Erreur XML lors de l'analyse de egm_data: {e}")
+            raise ValueError("Données EGM incorrectes ou mal formatées")
 
         # Find the polyline with the stroke color #396BA5
         ra_signal = []
@@ -73,14 +87,28 @@ class AIBSCModel:
         # Preprocess the signal
         preprocessed_signal = self.preprocess_single_episode(ra_signal_array)
 
-        # Make a prediction with the loaded model
-        prediction = (self.model.predict(preprocessed_signal) > 0.5).astype("int32")
+       # Prédiction
+        prediction = int((self.model.predict(preprocessed_signal) > 0.5).astype("int32")[0][0])
+
+        # Correspondance des prédictions numériques aux étiquettes textuelles
+        prediction_labels = {
+            0: "TA/FA",
+            1: "Noise",
+            2: "Oversensing"
+        }
+
+        # Conversion en entier avant la correspondance
+        if isinstance(prediction, np.ndarray):
+            logger.error(f"Type incorrect de prédiction: {type(prediction)} -> {prediction}")
+
+        prediction_text = prediction_labels.get(prediction, "Unknown")
+        logger.info(f"Prédiction obtenue: {prediction_text}")
 
         return {
-            "prediction": int(prediction[0][0]),
+            "prediction": prediction_text,
             "confidence": 1.0,
             "model_type": "AI BSC AF",
-            "timestamp": "2024-03-21",
+            "timestamp": str(datetime.datetime.now().isoformat()),
             "details": {}  # Ajout du champ 'details'
         }
 

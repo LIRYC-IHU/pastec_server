@@ -23,9 +23,9 @@ def load_private_key_from_pem(pem_path):
         logger.error(f"Erreur lors du chargement de la clé privée : {str(e)}")
         raise ValueError("Impossible de charger la clé privée")
 
-async def get_jwt_token(application_name: str) -> str:
+async def get_jwt_token(application_name: str, pem_path: str) -> str:
     """Génère un JWT signé avec la clé privée"""
-    private_key = load_private_key_from_pem("./private_key.pem")
+    private_key = load_private_key_from_pem(pem_path)
     try:
         logger.info("Starting to generate the JWT token with private key")
         

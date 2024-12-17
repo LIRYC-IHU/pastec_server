@@ -3,17 +3,26 @@ FROM python:3.9-slim
 WORKDIR /ai_worker
 
 # Installation des dépendances système nécessaires
-RUN apt-get update && apt-get install -y --fix-missing --allow-unauthenticated \
+RUN apt-get update && apt-get install -y \
+    libsndfile1-dev \
+    libsndfile1 \
+    libxml2-dev \
+    libxslt1-dev \
+    ffmpeg \
     build-essential \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get clean
 
 # Copie des fichiers de requirements
+
+# Installer les dépendances avant de copier tout le code
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
+
 
 # Création du répertoire ai_models et copie des scripts
 RUN mkdir -p /ai_worker/ai_models
 COPY ./ai_models /ai_worker/ai_models
+COPY ./private_keys /ai_worker/private_keys
 
 # Copie du reste du code source
 COPY . .

@@ -20,7 +20,7 @@ class KeycloakService:
         self.realm = os.getenv("KEYCLOAK_REALM", "pastec")
         self.admin_username = os.getenv("KEYCLOAK_ADMIN", "pastec-admin")
         self.admin_password = os.getenv("KEYCLOAK_ADMIN_PASSWORD", "test")
-        self.client_id = os.getenv("KEYCLOAK_CLIENT_ID_NUM", "68c95503-9866-484b-a2b2-7e8ca58b2a64")
+        self.client_id = os.getenv("KEYCLOAK_CLIENT_ID_NUM", "6f5f59fb-7afe-4b73-a7a6-2a27c9306907")
         # Log des variables d'environnement (en masquant le mot de passe)
         logger.debug(f"Keycloak URL: {self.keycloak_url}")
         logger.debug(f"Realm: {self.realm}")
