@@ -60,6 +60,53 @@ async def list_episodes(auth_info: dict = Depends(get_auth_info), limit: int = 2
 
 #créer une route post pour l'upload d'épisodes de type Episode (cf. db.py), et renvoyer les labels possibles pour le type d'épisode contenu dans la collection diagnoses de la database
 
+async def send_to_ai(manufacturer: str, episode_type: str, episode_id: str, jobs: List[str]):
+    keycloak_service = KeycloakService()
+    ai_client_list = await keycloak_service.get_ai_clients(manufacturer, episode_type)
+    ai_clients = []
+    for ai_client in ai_client_list:
+        roles = await keycloak_service.get_ai_client_roles(ai_client)
+        logger.info(f"Rôles trouvés pour {ai_client['client_name']}: {roles}")
+        if f"{manufacturer.lower()}.{episode_type}" in roles.get(ai_client['client_name'], []):
+            ai_clients.append(ai_client['client_name'])
+
+    ai_available = len(ai_clients) > 0
+    
+    logger.info(ai_available)
+    
+    if ai_available:
+        logger.info(f"Modèles IA disponibles: {ai_clients}")
+        logger.info("Envoi des requêtes vers le serveur IA")
+        for ai_client in ai_clients:
+            job_id = str(ObjectId())
+            jobs.append(job_id)
+            logger.info(f"Envoi de la requête au serveur IA pour le modèle {ai_client} avec job_id: {job_id}")
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{AI_WORKER_URL}/process/{job_id}",
+                    json={
+                        "id_model": ai_client,
+                        "job_id": job_id
+                    }
+                )
+                logger.info(f"Requête envoyée à l'IA {ai_client}: {response.status_code}")
+                if response.status_code == 202:
+                    logger.info(f"Requête acceptée par l'IA {ai_client}, stockage du job ID dans mongodb sous la collection jobs")
+                    await engine.save(Job(
+                        job_id=job_id,
+                        episode_id=episode_id,
+                        id_model=ai_client,
+                        status=JobStatus.PENDING,
+                        created_at=datetime.utcnow(),
+                        updated_at=datetime.utcnow(),
+                        annotation=None,
+                        confidence=None,
+                        details=None
+                    ))
+                else:
+                    logger.error(f"Erreur lors de l'envoi à l'IA {ai_client}: {response.text}")
+    return ai_clients, ai_available
+
 @episode_router.post("/upload_episode")
 async def upload_episode(
     auth_info: dict = Depends(get_auth_info),
@@ -71,55 +118,7 @@ async def upload_episode(
     episode_id: str = Form(...)
 ) -> JSONResponse:
     try:
-        
         jobs = []
-        # Vérifier les utilisateurs IA disponibles
-        keycloak_service = KeycloakService()
-        ai_client_list = await keycloak_service.get_ai_clients(manufacturer, episode_type)
-        ai_clients = []
-        for ai_client in ai_client_list:
-            roles = await keycloak_service.get_ai_client_roles(ai_client)
-            logger.info(f"Rôles trouvés pour {ai_client['client_name']}: {roles}")
-            if f"{manufacturer.lower()}.{episode_type}" in roles.get(ai_client['client_name'], []):
-                ai_clients.append(ai_client['client_name'])
-
-        ai_available = len(ai_clients) > 0
-        
-        logger.info(ai_available)
-        
-        if ai_available:
-            logger.info(f"Modèles IA disponibles: {ai_clients}")
-            logger.info("Envoi des requêtes vers le serveur IA")
-            for ai_client in ai_clients:
-                job_id = str(ObjectId())# Utiliser un ObjectId valide
-                jobs.append(job_id)
-                logger.info(f"Envoi de la requête au serveur IA pour le modèle {ai_client} avec job_id: {job_id}")
-                # Envoyer l'EGM à l'IA
-                async with httpx.AsyncClient() as client:
-                    response = await client.post(
-                        f"{AI_WORKER_URL}/process/{job_id}",
-                        json={
-                            "id_model": ai_client,
-                            "job_id": job_id
-                        }
-                    )
-                    logger.info(f"Requête envoyée à l'IA {ai_client}: {response.status_code}")
-                    if response.status_code == 202:
-                        logger.info(f"Requête acceptée par l'IA {ai_client}, stockage du job ID dans mongodb sous la collection jobs")
-                        await engine.save(Job(
-                            job_id=job_id,
-                            episode_id=episode_id,
-                            id_model=ai_client,
-                            status=JobStatus.PENDING,
-                            created_at=datetime.utcnow(),
-                            updated_at=datetime.utcnow(),
-                            annotation=None,
-                            confidence=None,
-                            details=None
-                        ))
-                    else:
-                        logger.error(f"Erreur lors de l'envoi à l'IA {ai_client}: {response.text}")
-    
         # Vérifier si l'épisode existe déjà
         existing_episode = await engine.find_one(Episode, Episode.episode_id == episode_id)
         
@@ -130,15 +129,16 @@ async def upload_episode(
                 manufacturer=existing_episode.manufacturer,
                 episode_type=existing_episode.episode_type
             )
+            ai_clients, ai_available = await send_to_ai(manufacturer, episode_type, episode_id, jobs)
             return JSONResponse(
-                status_code=200,  # 200 au lieu de 201 car pas de création
+                status_code=200,
                 content={
                     "episode_id": existing_episode.episode_id,
                     "patient_id": existing_episode.patient_id,
                     "manufacturer": existing_episode.manufacturer,
                     "episode_type": existing_episode.episode_type,
                     "labels": labels,
-                    "exists": True,  # Indicateur pour le frontend
+                    "exists": True,
                     "annotated": True if existing_episode.annotations else False,
                     "ai_available": ai_available,
                     "ai_clients": ai_clients if ai_available else [],
@@ -176,17 +176,14 @@ async def upload_episode(
                 "episode_type": episode.episode_type,
                 "labels": labels,
                 "exists": False,
-                "annotated": False,
-                "ai_available": ai_available,
-                "ai_clients": ai_clients if ai_available else [],
-                "jobs": jobs if jobs else []
+                "annotated": False
             }
         )
     except Exception as e:
         logger.error(f"Erreur lors de l'upload: {str(e)}")
         logger.exception("Traceback complet:")
         raise HTTPException(status_code=422, detail=str(e))
-
+    
 
 @episode_router.get("/{id}")
 async def get_episode_by_id(id: ObjectId, auth_info: dict = Depends(get_auth_info)) -> EpisodeInfo:
@@ -280,7 +277,6 @@ async def post_episode_egm(
     logger.info(f"Headers: {file.headers}")
     
     try:
-        # Rechercher par episode_id au lieu de _id
         episode = await engine.find_one(Episode, Episode.episode_id == episode_id)
         if not episode:
             logger.error(f"Episode {episode_id} non trouvé")
@@ -302,11 +298,18 @@ async def post_episode_egm(
             # Stocker l'EGM dans l'épisode
             episode.egm = Binary(content)
             await engine.save(episode)
+            jobs = []
+            ai_clients, ai_available = await send_to_ai(episode.manufacturer, episode.episode_type, episode_id, jobs)
+            
             logger.info(f"EGM sauvegardé avec succès pour l'épisode {episode_id}")
             
             return JSONResponse(
                 status_code=201,
-                content={"message": "EGM stored successfully"}
+                content={
+                    "message": "EGM stored successfully",
+                    "ai_available": ai_available,
+                    "ai_clients": ai_clients if ai_available else [],
+                    "jobs": jobs if jobs else []}
             )
 
         except Exception as read_error:
