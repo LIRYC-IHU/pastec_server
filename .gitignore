@@ -8,4 +8,5 @@
 .DS_Store
 .env
 .venv/ 
+.ai_worker/ai_models/
 
