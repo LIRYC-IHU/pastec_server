@@ -9,6 +9,9 @@ class TokenData(BaseModel):
     token: Optional[str] = None
     role: str
 
+class Token(BaseModel):
+    token: str
+
 class User(BaseModel):
     id: str
     username: str

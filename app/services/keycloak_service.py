@@ -20,25 +20,31 @@ class KeycloakService:
         self.realm = os.getenv("KEYCLOAK_REALM", "pastec")
         self.admin_username = os.getenv("KEYCLOAK_ADMIN", "pastec-admin")
         self.admin_password = os.getenv("KEYCLOAK_ADMIN_PASSWORD", "test")
-        self.client_id = os.getenv("KEYCLOAK_CLIENT_ID_NUM", "6f5f59fb-7afe-4b73-a7a6-2a27c9306907")
-        # Log des variables d'environnement (en masquant le mot de passe)
+        self.client_id = os.getenv("KEYCLOAK_ADMIN_CLIENT_ID", "admin-cli")  # Par défaut admin-cli
+        self.client_secret = os.getenv("KEYCLOAK_ADMIN_CLIENT_SECRET", None)  # Ajouter le secret
+        # Log des variables d'environnement (en masquant le mot de passe et le secret)
         logger.debug(f"Keycloak URL: {self.keycloak_url}")
         logger.debug(f"Realm: {self.realm}")
         logger.debug(f"Admin username: {self.admin_username}")
-        logger.debug(f"Admin password length: {len(self.admin_password) if self.admin_password else 0}")
+        logger.debug(f"Admin client ID: {self.client_id}")
+        logger.debug(f"Admin client secret length: {len(self.client_secret) if self.client_secret else 0}")
 
     async def get_admin_token(self) -> str:
         """Obtenir un token d'accès admin pour l'API Keycloak"""
         token_url = f"{self.keycloak_url}/realms/{self.realm}/protocol/openid-connect/token"
         data = {
             "grant_type": "password",
-            "client_id": "admin-cli",
+            "client_id": self.client_id,
             "username": self.admin_username,
             "password": self.admin_password
         }
+
+        # Inclure le client_secret si le client est confidentiel
+        if self.client_secret:
+            data["client_secret"] = self.client_secret
         
         logger.debug(f"Attempting to get admin token from: {token_url}")
-        logger.debug(f"Request data (excluding password): {dict(data, password='*****')}")
+        logger.debug(f"Request data (excluding password and client_secret): {dict(data, password='*****', client_secret='*****')}")
         
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
@@ -65,6 +71,7 @@ class KeycloakService:
         except Exception as e:
             logger.error(f"Unexpected error during token request: {str(e)}", exc_info=True)
             raise HTTPException(500, f"Unexpected error: {str(e)}")
+
 
     async def get_ai_clients(self, manufacturer: str, episode_type: str) -> List[Dict[str, str]]:
         """Vérifier les clients IA disponibles pour un type d'épisode"""
