@@ -4,7 +4,7 @@ Contains most of the important routes of the application
 
 JD 31/10/24
 """
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, Body, Form, File
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, Body, Form, File, Query
 from fastapi.responses import JSONResponse, FileResponse
 from auth import get_user_info, get_auth_info, check_role, get_ai_model_info
 import httpx
@@ -47,6 +47,66 @@ annotation_router = APIRouter(
 )
 
 ''' Routes for episode handling '''
+
+@episode_router.get("/search")
+async def search(
+    episode_id: Optional[str] = Query(None),
+    episode_type: Optional[str] = Query(None),
+    manufacturer: Optional[str] = Query(None),
+    user: Optional[str] = Query(None),
+    label: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+) -> JSONResponse:
+    """
+    Recherche des épisodes en fonction de plusieurs critères avec pagination
+    """
+    try:
+        query = {}
+
+        # Recherche dans les champs principaux
+        if episode_id:
+            query["episode_id"] = {"$regex": episode_id, "$options": "i"}
+        if episode_type:
+            query["episode_type"] = {"$regex": episode_type, "$options": "i"}
+        if manufacturer:
+            query["manufacturer"] = {"$regex": manufacturer, "$options": "i"}
+        
+        # Recherche dans les annotations
+        if label:
+            query["annotations.label"] = {"$regex": label, "$options": "i"}
+        if user:
+            query["annotations.user"] = {"$regex": user, "$options": "i"}
+
+        # Pagination
+        skip = (page - 1) * limit
+        cursor = engine.get_collection(Episode).find(query).skip(skip).limit(limit)
+        results = await cursor.to_list(length=limit)
+        # Convertir les résultats pour JSON
+        def convert_document(doc):
+            doc["_id"] = str(doc["_id"])  # Convert ObjectId en chaîne
+            if "egm" in doc:  # Supprimer ou transformer les données binaires
+                doc["egm"] = "Binary data omitted"
+            for annotation in doc.get("annotations", []):
+                if "_id" in annotation:
+                    annotation["_id"] = str(annotation["_id"])
+            return doc
+
+        json_results = [convert_document(result) for result in results]
+        total = await engine.get_collection(Episode).count_documents(query)
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "results": json_results,
+                "total": total,
+                "page": page,
+                "limit": limit
+            }
+        )
+    except Exception as e:
+        logger.error(f"Erreur lors de la recherche : {str(e)}")
+        raise HTTPException(status_code=500, detail="Error searching episodes")
 
 @episode_router.get("/episodelist")
 async def list_episodes(auth_info: dict = Depends(get_auth_info), limit: int = 20) -> List[EpisodeInfo]:
