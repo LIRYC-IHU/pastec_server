@@ -107,19 +107,7 @@ async def search(
     except Exception as e:
         logger.error(f"Erreur lors de la recherche : {str(e)}")
         raise HTTPException(status_code=500, detail="Error searching episodes")
-
-@episode_router.get("/episodelist")
-async def list_episodes(auth_info: dict = Depends(get_auth_info), limit: int = 20) -> List[EpisodeInfo]:
-    logger.info(f"Requête reçue pour lister les épisodes avec auth_info: {auth_info}")
-    """
-    List all the episodes that we have, potentially matching some criteria 
-    """
-    # TODO: add filters
-    episodes = await engine.find(Episode, limit=limit)
-    return [EpisodeInfo(**e.model_dump()) for e in episodes]
-
-#créer une route post pour l'upload d'épisodes de type Episode (cf. db.py), et renvoyer les labels possibles pour le type d'épisode contenu dans la collection diagnoses de la database
-
+    
 async def send_to_ai(manufacturer: str, episode_type: str, episode_id: str, jobs: List[str]):
     keycloak_service = KeycloakService()
     ai_client_list = await keycloak_service.get_ai_clients(manufacturer, episode_type)
