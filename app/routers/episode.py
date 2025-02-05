@@ -57,9 +57,11 @@ async def search(
     label: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
+    sort_by: str = Query("patient_id"),
+    sort_order: str = Query("asc")
 ) -> JSONResponse:
     """
-    Recherche des épisodes en fonction de plusieurs critères avec pagination
+    Recherche des épisodes en fonction de plusieurs critères avec pagination et tri.
     """
     try:
         query = {}
@@ -80,11 +82,28 @@ async def search(
 
         # Pagination
         skip = (page - 1) * limit
-        cursor = engine.get_collection(Episode).find(query).skip(skip).limit(limit)
+        
+        # Définir l'ordre de tri
+        order = 1 if sort_order == "asc" else -1
+
+        # Validation du champ de tri
+        valid_sort_fields = ["episode_id", "patient_id", "episode_type", "manufacturer", "age_at_episode", "episode_duration"]
+        if sort_by not in valid_sort_fields:
+            raise HTTPException(status_code=400, detail=f"Invalid sort_by field. Must be one of: {', '.join(valid_sort_fields)}")
+
+        # Exécuter la requête avec tri
+        cursor = (
+            engine.get_collection(Episode)
+            .find(query)
+            .sort(sort_by, order)
+            .skip(skip)
+            .limit(limit)
+        )
         results = await cursor.to_list(length=limit)
+
         # Convertir les résultats pour JSON
         def convert_document(doc):
-            doc["_id"] = str(doc["_id"])  # Convert ObjectId en chaîne
+            doc["_id"] = str(doc["_id"])  # Convertir ObjectId en chaîne
             if "egm" in doc:  # Supprimer ou transformer les données binaires
                 doc["egm"] = "Binary data omitted"
             for annotation in doc.get("annotations", []):
@@ -95,13 +114,16 @@ async def search(
         json_results = [convert_document(result) for result in results]
         total = await engine.get_collection(Episode).count_documents(query)
 
+        # Retourner les résultats
         return JSONResponse(
             status_code=200,
             content={
                 "results": json_results,
                 "total": total,
                 "page": page,
-                "limit": limit
+                "limit": limit,
+                "sort_by": sort_by,
+                "sort_order": sort_order
             }
         )
     except Exception as e:
@@ -231,6 +253,40 @@ async def upload_episode(
         logger.error(f"Erreur lors de l'upload: {str(e)}")
         logger.exception("Traceback complet:")
         raise HTTPException(status_code=422, detail=str(e))
+
+@episode_router.get("/{episode_id}/diagnostics")
+async def get_episode_diagnostics(episode_id: str) -> JSONResponse:
+    """
+    Récupère les diagnostics disponibles pour un épisode spécifique. Utilisé dans la web app
+    """
+    try:
+        # Rechercher l'épisode par son ID
+        episode = await engine.find_one(Episode, Episode.episode_id == episode_id)
+        if not episode:
+            raise HTTPException(404, detail='No episode with this ID.')
+
+        # Obtenir les diagnostics basés sur le fabricant et le type d'épisode
+        diagnosis_service = DiagnosisService(engine)
+        labels = await diagnosis_service.get_possible_labels(
+            manufacturer=episode.manufacturer,
+            episode_type=episode.episode_type
+        )
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "episode_id": episode_id,
+                "patient_id": episode.patient_id,
+                "episode_type": episode.episode_type,
+                "episode_duration": episode.episode_duration,
+                "age_at_episode": episode.age_at_episode,
+                "manufacturer": episode.manufacturer,
+                "diagnostics": labels
+            }
+        )
+    except Exception as e:
+        logger.error(f"Erreur lors de la récupération des diagnostics : {str(e)}")
+        raise HTTPException(500, detail="Error retrieving diagnostics")
     
 
 @episode_router.get("/{id}")

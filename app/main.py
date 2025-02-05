@@ -21,7 +21,7 @@ import os
 from motor.motor_asyncio import AsyncIOMotorClient
 from db import DiagnosesCollection
 import logging
-from settings import MONGODB_URI, MONGODB_DB_NAME
+from settings import *
  # Importer le routeur IA
 
 logging.basicConfig(
@@ -158,5 +158,14 @@ async def startup_event():
     print("Routes enregistrées :")
     for route in app.routes:
         print(f"{route.path} [{route.methods}]")
+    print("URLS disponibles :")
+    # Afficher les valeurs en mode debug
+    logger.info(f"KEYCLOAK_SERVER_URL: {KEYCLOAK_SERVER_URL}")
+    logger.info(f"KEYCLOAK_INTERNAL_SERVER_URL: {KEYCLOAK_INTERNAL_SERVER_URL}")
+    logger.info(f"KEYCLOAK_REALM: {KEYCLOAK_REALM}")
+    logger.info(f"KEYCLOAK_OPENID_CONNECT_URL: {KEYCLOAK_OPENID_CONNECT_URL}")
+    logger.info(f"KEYCLOAK_TOKEN_URL: {KEYCLOAK_TOKEN_URL}")
+    logger.info(f"KEYCLOAK_AUTH_URL: {KEYCLOAK_AUTH_URL}")
+    logger.info(f"KEYCLOAK_INTERNAL_REALM_URL: {KEYCLOAK_INTERNAL_REALM_URL}")
 
 

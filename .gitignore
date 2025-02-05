@@ -6,7 +6,6 @@
 *.pyd
 *.pem
 .DS_Store
-.env
 .venv/ 
 *.h5
 ec2-user@51.20.129.165

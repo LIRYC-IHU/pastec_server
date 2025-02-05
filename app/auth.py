@@ -34,7 +34,7 @@ security = HTTPBearer()
 @lru_cache
 async def fetch_jwks():
     async with httpx.AsyncClient() as client:
-        response = await client.get(f"{KEYCLOAK_SERVER_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/certs")
+        response = await client.get(f"{KEYCLOAK_INTERNAL_SERVER_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/certs")
         response.raise_for_status()
         return response.json()
 
