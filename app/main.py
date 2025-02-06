@@ -15,6 +15,7 @@ from routers.episode import episode_router, egm_router, annotation_router
 from routers.ai import ai_router 
 from routers.user import user_router
 from contextlib import asynccontextmanager
+from services.keycloak_service import KeycloakService
 from fastapi.middleware.cors import CORSMiddleware
 import json
 import os
@@ -23,9 +24,11 @@ from db import DiagnosesCollection
 import logging
 from settings import *
  # Importer le routeur IA
+ 
+keycloak_service: KeycloakService = None
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler()
@@ -36,6 +39,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
+        await startup_event()
         # Vérifier la connexion MongoDB
         await engine.admin.command('ping')
         logger.info("Connexion MongoDB établie")
@@ -96,6 +100,11 @@ app.include_router(annotation_router)
 app.include_router(ai_router)  # Inclure le routeur IA
 
 # Example public route
+
+@app.head("/")
+async def read_root_head():
+    return {}
+
 @app.get("/")
 async def root():
     return {"message": "Hello World"}
@@ -153,19 +162,27 @@ engine = AsyncIOMotorClient(
 )
 
 # Ajoutez ce code pour déboguer
-@app.on_event("startup")
 async def startup_event():
-    print("Routes enregistrées :")
-    for route in app.routes:
-        print(f"{route.path} [{route.methods}]")
-    print("URLS disponibles :")
-    # Afficher les valeurs en mode debug
-    logger.info(f"KEYCLOAK_SERVER_URL: {KEYCLOAK_SERVER_URL}")
-    logger.info(f"KEYCLOAK_INTERNAL_SERVER_URL: {KEYCLOAK_INTERNAL_SERVER_URL}")
-    logger.info(f"KEYCLOAK_REALM: {KEYCLOAK_REALM}")
-    logger.info(f"KEYCLOAK_OPENID_CONNECT_URL: {KEYCLOAK_OPENID_CONNECT_URL}")
-    logger.info(f"KEYCLOAK_TOKEN_URL: {KEYCLOAK_TOKEN_URL}")
-    logger.info(f"KEYCLOAK_AUTH_URL: {KEYCLOAK_AUTH_URL}")
-    logger.info(f"KEYCLOAK_INTERNAL_REALM_URL: {KEYCLOAK_INTERNAL_REALM_URL}")
+    global keycloak_service
+    logger.info("🔄 Initializing keycloak service...")  # Log avant l'init
+    keycloak_service = KeycloakService()
+    
+    if keycloak_service is None:
+        logger.error("❌ KeycloakService is NOT initialized!")
+    else:
+        logger.info("✅ KeycloakService initialized successfully.")
+
+    # Vérification des variables chargées
+    logger.debug(f"Keycloak URL: {keycloak_service.keycloak_url}")
+    logger.debug(f"Realm: {keycloak_service.realm}")
+    logger.debug(f"Admin username: {keycloak_service.admin_username}")
+    logger.debug(f"Admin client ID: {keycloak_service.client_id}")
+
+    # Vérification des variables d’environnement
+    logger.debug(f"Environment KEYCLOAK_ADMIN: {os.getenv('KEYCLOAK_ADMIN')}")
+
+
+
+
 
 

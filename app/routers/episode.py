@@ -131,7 +131,20 @@ async def search(
         raise HTTPException(status_code=500, detail="Error searching episodes")
     
 async def send_to_ai(manufacturer: str, episode_type: str, episode_id: str, jobs: List[str]):
+    
+    logger.info('Calling Keycloak Service...')
+    
     keycloak_service = KeycloakService()
+        # Vérification des variables chargées
+    logger.debug(f"Keycloak URL: {keycloak_service.keycloak_url}")
+    logger.debug(f"Realm: {keycloak_service.realm}")
+    logger.debug(f"Admin username: {keycloak_service.admin_username}")
+    logger.debug(f"Admin client ID: {keycloak_service.client_id}")
+
+    # Vérification des variables d’environnement
+    logger.debug(f"Environment KEYCLOAK_ADMIN: {os.getenv('KEYCLOAK_ADMIN')}")
+    
+    
     ai_client_list = await keycloak_service.get_ai_clients(manufacturer, episode_type)
     ai_clients = []
     for ai_client in ai_client_list:

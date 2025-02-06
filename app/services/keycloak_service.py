@@ -16,20 +16,22 @@ logger = logging.getLogger(__name__)
 
 class KeycloakService:
     def __init__(self):
-        self.keycloak_url = os.getenv("KEYCLOAK_INTERNAL_SERVER_URL", "http://keycloak:8080")
+        self.keycloak_url = os.getenv("KEYCLOAK_SERVER_URL")
         self.realm = os.getenv("KEYCLOAK_REALM", "pastec")
-        self.admin_username = os.getenv("KEYCLOAK_ADMIN", "pastec-admin")
-        self.admin_password = os.getenv("KEYCLOAK_ADMIN_PASSWORD", "test")
+        self.admin_username = os.getenv("KEYCLOAK_PASTEC_ADMIN")
+        self.admin_password = os.getenv("KEYCLOAK_PASTEC_ADMIN_PASSWORD")
         self.client_id = os.getenv("KEYCLOAK_ADMIN_CLIENT_ID", "admin-cli")  # Par défaut admin-cli
         self.client_secret = os.getenv("KEYCLOAK_ADMIN_CLIENT_SECRET", None)  # Ajouter le secret
         # Log des variables d'environnement (en masquant le mot de passe et le secret)
-        logger.debug(f"Keycloak URL: {self.keycloak_url}")
-        logger.debug(f"Realm: {self.realm}")
-        logger.debug(f"Admin username: {self.admin_username}")
-        logger.debug(f"Admin client ID: {self.client_id}")
-        logger.debug(f"Admin client secret length: {len(self.client_secret) if self.client_secret else 0}")
+        logger.info(f"Keycloak URL: {self.keycloak_url}")
+        logger.info(f"Realm: {self.realm}")
+        logger.info(f"Admin username: {self.admin_username}")
+        logger.info(f"Admin client ID: {self.client_id}")
+        logger.info(f"Admin client secret length: {len(self.client_secret) if self.client_secret else 0}")
 
     async def get_admin_token(self) -> str:
+        
+        # Vérification des variables chargées
         """Obtenir un token d'accès admin pour l'API Keycloak"""
         token_url = f"{self.keycloak_url}/realms/{self.realm}/protocol/openid-connect/token"
         data = {
