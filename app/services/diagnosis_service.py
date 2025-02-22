@@ -15,29 +15,53 @@ class DiagnosisService:
         self.engine = engine
         
     async def get_possible_labels(self, manufacturer: Manufacturer, episode_type: str) -> List[str]:
-        diagnoses = await self.engine.find_one(DiagnosesCollection)
-        if not diagnoses:
-            logger.warning("Aucun diagnostic trouvé dans la collection")
+        
+        try: 
+            manufacturer_key = manufacturer.value.capitalize()
+            diagnoses = await self.engine.find_one(DiagnosesCollection, DiagnosesCollection.manufacturer_diagnoses == manufacturer_key)
+             
+            if not diagnoses:
+                logger.warning("Aucun diagnostic trouvé dans la collection")
+                return []
+                
+            # Convertir le manufacturer en string avec la première lettre en majuscule
+            manufacturer_key = manufacturer.value.capitalize()
+            logger.info(f"Clé manufacturer recherchée: {manufacturer_key}")
+            
+            # Récupérer les diagnostics pour ce manufacturer
+            manufacturer_diagnoses = diagnoses.manufacturer_diagnoses.get(manufacturer_key, {})
+            
+            logger.info(f"Diagnostics trouvés pour {manufacturer_key}: {manufacturer_diagnoses}")
+            
+            # Récupérer les labels pour ce type d'épisode
+            labels = diagnoses[manufacturer_key]
+            logger.info(f"Labels trouvés pour {episode_type}: {labels}")
+            
+            # Si aucun label trouvé, essayer avec "Episodes without diagnoses"
+            if not labels:
+                labels = manufacturer_diagnoses.get("Episodes without diagnoses", [])
+                logger.info(f"Labels par défaut utilisés: {labels}")
+                
+            return labels if labels != [""] else []
+        except Exception as e:
+            logger.error(f"Erreur lors de la récupération des labels possibles: {str(e)}")
             return []
-            
-        # Convertir le manufacturer en string avec la première lettre en majuscule
-        manufacturer_key = manufacturer.value.capitalize()
-        logger.info(f"Clé manufacturer recherchée: {manufacturer_key}")
-        
-        # Récupérer les diagnostics pour ce manufacturer
-        manufacturer_diagnoses = diagnoses.manufacturer_diagnoses.get(manufacturer_key, {})
-        
-        # Récupérer les labels pour ce type d'épisode
-        labels = manufacturer_diagnoses.get(episode_type, [])
-        logger.info(f"Labels trouvés pour {episode_type}: {labels}")
-        
-        # Si aucun label trouvé, essayer avec "Episodes without diagnoses"
-        if not labels:
-            labels = manufacturer_diagnoses.get("Episodes without diagnoses", [])
-            logger.info(f"Labels par défaut utilisés: {labels}")
-            
-        return labels if labels != [""] else []
     
+    async def get_all_labels(self, manufacturer: Manufacturer) -> dict[str]:
+        try:
+            manufacturer_key = manufacturer.value.capitalize()
+            logger.info(f"Récupération de tous les labels pour {manufacturer_key}")
+            diagnoses = await self.engine.find_one(
+                DiagnosesCollection, 
+                {"manufacturer_diagnoses": {"$exists": True}, f"manufacturer_diagnoses.{manufacturer_key}": {"$exists": True}}
+            )
+            logger.info(f"Labels trouvés pour {manufacturer}: {diagnoses}")
+            labels = diagnoses.manufacturer_diagnoses[manufacturer_key]
+            return labels
+        except Exception as e:
+            logger.error(f"Erreur lors de la récupération de tous les labels: {str(e)}")
+            return []
+        
 
     async def update_diagnosis(self, manufacturer: Manufacturer, diagnosis: str, labels: List[str]) -> bool:
         """

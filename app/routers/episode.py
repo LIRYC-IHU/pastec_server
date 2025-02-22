@@ -381,6 +381,37 @@ async def update_diagnosis(
         logger.error(f"💥 Erreur lors de la mise à jour des diagnostics: {str(e)}")
         raise HTTPException(500, detail="Error updating diagnoses")
     
+    
+@episode_router.get("/diagnoses_labels/{manufacturer}")
+async def get_diagnoses(
+    manufacturer: str,
+    auth_info: dict = Depends(get_auth_info)
+) -> JSONResponse:
+    """
+    Récupère les diagnostics disponibles pour un fabricant et tous les épisodes possibles - permet d'améliorer la réactivité du plugin vs. une requête par épisode pour certains cas d'usage
+    """
+    diagnosis_service = DiagnosisService(engine)
+    
+    manufacturer_enum = Manufacturer(manufacturer.lower())
+    logger.info(f"manufactuer: {manufacturer_enum}")
+    
+    try:
+        logger.info(auth_info)
+        logger.info(f"Requête reçue pour récupérer les diagnostics | Fab: {manufacturer}")
+        labels = await diagnosis_service.get_all_labels(manufacturer_enum)
+        return JSONResponse(
+            status_code=200,
+            content={
+                "manufacturer": manufacturer,
+                "labels": labels
+            }
+    )
+    except Exception as e:
+        logger.error(f"Erreur lors de la récupération des diagnostics: {str(e)}")
+        raise HTTPException(500, detail="Error retrieving diagnoses")
+
+
+    
 """ 
 Routes for EGM handling
 """
