@@ -1,6 +1,7 @@
 from typing import List
 from motor.motor_asyncio import AsyncIOMotorClient
 from db import DiagnosesCollection, Manufacturer
+from fastapi import HTTPException
 import logging
 
 logger = logging.getLogger(__name__)
@@ -36,3 +37,47 @@ class DiagnosisService:
             logger.info(f"Labels par défaut utilisés: {labels}")
             
         return labels if labels != [""] else []
+    
+
+    async def update_diagnosis(self, manufacturer: Manufacturer, diagnosis: str, labels: List[str]) -> bool:
+        """
+        Met à jour les labels d'un diagnostic spécifique pour un fabricant.
+        Vérifie que le fabricant existe et que les labels sont bien stockés en liste.
+        """
+        try:
+            manufacturer_key = manufacturer.value.capitalize()  # Assurer la cohérence avec MongoDB
+            logging.info(f"🔄 Mise à jour du diagnostic '{diagnosis}' pour {manufacturer_key} avec labels: {labels}")
+            
+            logging.info(f"type des labels: {type(labels)}")
+            logging.info(f"labels: {labels}")
+
+            # 🔥 Vérifier si un document `DiagnosesCollection` existe
+            diagnosis_doc = await self.engine.find_one(DiagnosesCollection)
+
+            if not diagnosis_doc:
+                logging.warning(f"⚠️ Aucun document 'manufacturer_diagnoses' trouvé en base !")
+                raise HTTPException(status_code=404, detail="No diagnoses document found in database.")
+
+            # ❌ Vérifier si le fabricant existe dans `manufacturer_diagnoses`
+            if manufacturer_key not in diagnosis_doc.manufacturer_diagnoses:
+                logging.error(f"❌ Manufacturer '{manufacturer_key}' not found. Check for spelling errors and case sensitivity.")
+                raise HTTPException(status_code=404, detail="Manufacturer not found, check for spelling errors and case.")
+
+            # ✅ Vérifier et convertir les labels en liste si nécessaire
+            if isinstance(labels, str):
+                labels = [label.strip() for label in labels.split(",")]
+
+            # ✅ Mise à jour **directe** de l’objet en mémoire
+            diagnosis_doc.manufacturer_diagnoses[manufacturer_key][diagnosis] = labels
+
+            # 🔄 **Sauvegarde complète de l’objet**
+            await self.engine.save(diagnosis_doc)
+
+            logging.info(f"✅ Labels mis à jour pour {manufacturer_key} - {diagnosis}: {labels}")
+            return True
+
+        except HTTPException as http_error:
+            raise http_error  # Laisser FastAPI gérer l'exception
+        except Exception as e:
+            logging.error(f"❌ Erreur lors de la mise à jour des diagnostics: {str(e)}")
+            raise HTTPException(status_code=500, detail="Internal Server Error")

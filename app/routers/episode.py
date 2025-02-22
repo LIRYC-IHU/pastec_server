@@ -308,8 +308,6 @@ async def get_episode_by_id(id: ObjectId, auth_info: dict = Depends(get_auth_inf
     """ 
     Get info about a given episode from its `id`
     """
-    
-    
     episode = await engine.find_one(Episode, Episode.id == id)
     if episode is None:
         raise HTTPException(404, 'Episode not found for this id.')
@@ -325,6 +323,64 @@ async def delete_episode_by_id(id: ObjectId, auth_info: dict = Depends(get_auth_
     await engine.delete(episode)
     return EpisodeInfo(**episode.model_dump())
 
+@episode_router.put("/diagnoses")
+async def update_diagnosis(
+    auth_info: dict = Depends(get_auth_info),  
+    diagnosis: str = Form(...),
+    manufacturer: str = Form(...),
+    labels: str = Form(...)
+) -> JSONResponse:
+    """
+    Met à jour les diagnostics pour un fabricant spécifique - accessible aux experts uniquement
+    """
+    logger.info(f"🔄 Requête reçue pour mise à jour | Fab: {manufacturer} | Diag: {diagnosis} | Labels: {labels}")
+    logger.info(f"labels: {labels}")
+
+    # Vérifier si l'utilisateur est bien un expert
+    user: User = auth_info.get("info")
+    if not user:
+        logger.error("❌ Aucune information utilisateur trouvée.")
+        raise HTTPException(403, "User information is missing")
+
+    username = user.username
+    realm_roles = user.realm_roles
+    logger.info(f"👤 Utilisateur: {username} | Rôles: {realm_roles}")
+    
+    try:
+        manufacturer_enum = Manufacturer(manufacturer.lower())  # Convertir en minuscule et en Enum
+    except ValueError:
+        logging.error(f"❌ Fabricant '{manufacturer}' invalide.")
+        raise ValueError(f"Invalid manufacturer: {manufacturer}")
+
+    if "update_labels" not in realm_roles:
+        logger.warning(f"⛔ Accès refusé pour {username} (pas le rôle 'update_labels')")
+        raise HTTPException(403, "User not authorized to update labels")
+    
+    # Mettre à jour le diagnostic
+    diagnosis_service = DiagnosisService(engine)
+    
+    try:
+        update_result = await diagnosis_service.update_diagnosis(manufacturer_enum, diagnosis, labels)
+        logger.info(f"🔍 Résultat de la mise à jour: {update_result}")
+        
+        logger.info('Vérification de la bonne mise à jour des diagnostics')
+        updated_labels = await diagnosis_service.get_possible_labels(manufacturer_enum, diagnosis)
+        logger.info(f"Labels mis à jour pour {manufacturer} - {diagnosis}: {updated_labels}")
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "message": "Diagnosis updated successfully",
+                "manufacturer": manufacturer,
+                "diagnosis": diagnosis,
+                "labels": labels
+            }
+        )
+    
+    except Exception as e:
+        logger.error(f"💥 Erreur lors de la mise à jour des diagnostics: {str(e)}")
+        raise HTTPException(500, detail="Error updating diagnoses")
+    
 """ 
 Routes for EGM handling
 """

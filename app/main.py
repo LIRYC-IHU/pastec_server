@@ -20,12 +20,14 @@ from fastapi.middleware.cors import CORSMiddleware
 import json
 import os
 from motor.motor_asyncio import AsyncIOMotorClient
+from odmantic import AIOEngine
 from db import DiagnosesCollection
 import logging
 from settings import *
  # Importer le routeur IA
  
 keycloak_service: KeycloakService = None
+engine: AIOEngine = None
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -41,8 +43,6 @@ async def lifespan(app: FastAPI):
     try:
         await startup_event()
         # Vérifier la connexion MongoDB
-        await engine.admin.command('ping')
-        logger.info("Connexion MongoDB établie")
         await init_diagnoses(engine)
         
         # Afficher les informations sur le modèle Episode
@@ -180,6 +180,13 @@ async def startup_event():
 
     # Vérification des variables d’environnement
     logger.debug(f"Environment KEYCLOAK_ADMIN: {os.getenv('KEYCLOAK_ADMIN')}")
+    
+    ## Initiliaze mongoDB
+    logger.info("🔄 Initializing MongoDB connection...")  # Log avant l'init
+    client = AsyncIOMotorClient(MONGODB_URI)
+    engine = AIOEngine(client, database=MONGODB_DB_NAME)
+    await client.admin.command('ping')
+    logger.info("Connexion MongoDB établie")
 
 
 

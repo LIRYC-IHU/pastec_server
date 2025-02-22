@@ -2,6 +2,8 @@ FROM python:3.9-slim
 
 WORKDIR /ai_worker
 
+RUN apt-get update && apt-get upgrade -y
+
 # Installation des dépendances système nécessaires
 RUN apt-get update && apt-get install -y \
     libsndfile1-dev \
