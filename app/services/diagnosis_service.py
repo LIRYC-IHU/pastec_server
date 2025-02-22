@@ -18,8 +18,11 @@ class DiagnosisService:
         
         try: 
             manufacturer_key = manufacturer.value.capitalize()
-            diagnoses = await self.engine.find_one(DiagnosesCollection, DiagnosesCollection.manufacturer_diagnoses == manufacturer_key)
-             
+            diagnoses = await self.engine.find_one(
+                DiagnosesCollection, 
+                {"manufacturer_diagnoses": {"$exists": True}, f"manufacturer_diagnoses.{manufacturer_key}": {"$exists": True}}
+            )
+            
             if not diagnoses:
                 logger.warning("Aucun diagnostic trouvé dans la collection")
                 return []
@@ -29,17 +32,17 @@ class DiagnosisService:
             logger.info(f"Clé manufacturer recherchée: {manufacturer_key}")
             
             # Récupérer les diagnostics pour ce manufacturer
-            manufacturer_diagnoses = diagnoses.manufacturer_diagnoses.get(manufacturer_key, {})
-            
-            logger.info(f"Diagnostics trouvés pour {manufacturer_key}: {manufacturer_diagnoses}")
+            logger.info(f"Diagnostics trouvés pour {manufacturer_key}: {diagnoses}")
             
             # Récupérer les labels pour ce type d'épisode
-            labels = diagnoses[manufacturer_key]
+            labels = diagnoses.manufacturer_diagnoses[manufacturer_key].get(episode_type, [])
             logger.info(f"Labels trouvés pour {episode_type}: {labels}")
             
             # Si aucun label trouvé, essayer avec "Episodes without diagnoses"
             if not labels:
-                labels = manufacturer_diagnoses.get("Episodes without diagnoses", [])
+                logger.warning("Aucun label trouvé pour cet épisode, tentative avec 'Episodes without diagnoses'")
+                labels = diagnoses[manufacturer_key]["Episodes without diagnoses"]
+                logger.info(f"Labels trouvés pour 'Episodes without diagnoses': {labels}")
                 logger.info(f"Labels par défaut utilisés: {labels}")
                 
             return labels if labels != [""] else []
