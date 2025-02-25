@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 class KeycloakService:
     def __init__(self):
-        self.keycloak_url = os.getenv("KEYCLOAK_SERVER_URL")
+        self.keycloak_url = os.getenv("KEYCLOAK_INTERNAL_SERVER_URL")
         self.realm = os.getenv("KEYCLOAK_REALM", "pastec")
         self.admin_username = os.getenv("KEYCLOAK_PASTEC_ADMIN")
         self.admin_password = os.getenv("KEYCLOAK_PASTEC_ADMIN_PASSWORD")
@@ -33,6 +33,12 @@ class KeycloakService:
         
         # Vérification des variables chargées
         """Obtenir un token d'accès admin pour l'API Keycloak"""
+        logger.debug("Getting admin token...")
+        logger.debug(f"Keycloak URL: {self.keycloak_url}")
+        logger.debug(f"Realm: {self.realm}")
+        logger.debug(f"Admin username: {self.admin_username}")  
+        logger.debug(f"Admin client ID: {self.client_id}")
+        logger.debug(f"Admin client secret length: {len(self.client_secret) if self.client_secret else 0}")
         token_url = f"{self.keycloak_url}/realms/{self.realm}/protocol/openid-connect/token"
         data = {
             "grant_type": "password",
