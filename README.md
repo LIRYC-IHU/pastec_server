@@ -175,6 +175,12 @@ To register a model:
 - log in with an admin account to Keycloak (http://localhost:8080)
 - create a client with authentication rule 
 
+# The Plugin
+
+## First identification
+
+https://pastec.ihu-liryc.fr/auth/realms/pastec/protocol/openid-connect/auth?client_id=pastec_server&redirect_uri=https%3A%2F%2Fpastec.ihu-liryc.fr%2Fusers%2Fcallback&response_type=code&scope=openid
+
 
 
 

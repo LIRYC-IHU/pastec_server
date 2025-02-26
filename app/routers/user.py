@@ -187,3 +187,33 @@ async def privacy_policy() -> HTMLResponse:
     <p>Merci d’utiliser <strong>PASTEC Plugin</strong>.</p>
     </body>
     </html>"""
+
+@user_router.get('/callback', response_class = HTMLResponse)
+async def callback() -> HTMLResponse:
+    return """
+    <html>
+    <head>
+    <meta charset="utf-8">
+    <title>Authentification - PASTEC</title>
+    <style>
+        body {
+        font-family: Arial, sans-serif;
+        margin: 2em;
+        line-height: 1.6;
+        }
+        h1, h2, h3 {
+        color: #333;
+        }
+        h1 {
+        margin-bottom: 0.5em;
+        }
+        p {
+        margin-bottom: 1em;
+        }
+    </style>
+    </head>
+    <body>
+    <h1>Authentification réussie</h1>
+    <p>Vous pouvez maintenant fermer cette fenêtre et retourner à l'application.</p>
+    </body>
+    </html>"""
