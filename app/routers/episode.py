@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse, FileResponse
 from auth import get_user_info, get_auth_info, check_role, get_ai_model_info
 import httpx
 from schemas import User, AIJob, EpisodeInfo  # Importer EpisodeInfo depuis schemas
-from db import engine, Episode, Annotation, Job, JobStatus, Manufacturer, UserType, client  # Importer le client MongoDB existant
+from db import engine, Episode, Annotation, Job, JobStatus, Manufacturer, UserType, ProcessingTimeForEpisode
 from typing import List, Annotated, Dict, Optional
 from odmantic import ObjectId
 from services.diagnosis_service import DiagnosisService
@@ -411,6 +411,57 @@ async def get_diagnoses(
         raise HTTPException(500, detail="Error retrieving diagnoses")
 
 
+@episode_router.post("/processing_time")
+async def post_processing_time(
+    processing_time: str = Form(...),
+    episode_id: str = Form(...),
+    auth_info: dict = Depends(get_auth_info)
+) -> JSONResponse:
+    """
+    Stocke le temps de traitement pour un épisode spécifique
+    """
+    
+    user: User = auth_info.get("info")
+    
+    logger.info(f"total auth_info: {auth_info}")
+    
+    if not user:
+        logger.error("Aucune information utilisateur trouvée.")
+        raise HTTPException(403, "User information is missing")
+    
+    username = user.username
+    user_type = user.groups[0]
+    
+    try:
+        processing_time = float(processing_time)
+    except ValueError:
+        logger.error(f"Temps de traitement invalide: {processing_time}")
+        raise HTTPException(400, "Invalid processing time")
+    
+    logger.debug(f"Requête reçue pour stocker le temps de traitement pour l'épisode {episode_id}")
+    logger.debug(f"Temps de traitement reçu: {processing_time}")
+    
+    processing_time = ProcessingTimeForEpisode(
+        episode_id=episode_id,
+        processing_time=processing_time,
+        user = username,
+        user_type=UserType(user_type),
+    )
+    
+    await engine.save(processing_time)
+    
+    try:
+        return JSONResponse(
+            status_code=201,
+            content={
+                "message": "Processing time stored successfully",
+                "episode_id": processing_time.episode_id,
+                "processing_time": processing_time.processing_time
+            }
+        )
+    except Exception as e:
+        logger.error(f"Erreur lors de l'ajout du temps de traitement: {str(e)}")
+        raise HTTPException(500, detail="Error storing processing time")
     
 """ 
 Routes for EGM handling
@@ -551,12 +602,14 @@ async def put_episode_annotation(
             logger.error(f"Episode {episode_id} non trouvé")
             raise HTTPException(404, detail='No episode with this ID.')
         
+
+        
         # Créer la nouvelle annotation avec le bon type d'utilisateur
         if auth_info['type'] == 'user':
             user = auth_info['info']
             new_annotation = Annotation(
                 user=user.username,
-                user_type=UserType.MD,  # ou choisir le type approprié selon votre logique
+                user_type=UserType(user.groups[0]),  # ou choisir le type approprié selon votre logique
                 label=label,
                 details=details  # Champ optionnel
             )

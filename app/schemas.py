@@ -20,6 +20,7 @@ class User(BaseModel):
     last_name: str
     realm_roles: list
     client_roles: list
+    groups: list
 
 class AIModel(BaseModel):
     client_id: str

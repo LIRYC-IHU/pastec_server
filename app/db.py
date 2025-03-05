@@ -20,7 +20,7 @@ engine = AIOEngine(client, database=MONGODB_DB_NAME)
 class UserType(str, Enum):
     EXPERT = "expert"
     MD = "md"
-    ARC = "arc"
+    ARC = "nurse"
     AI = "ai"
 
 class Manufacturer(str, Enum):
@@ -103,3 +103,12 @@ class AIJob(BaseModel):
     confidence: Optional[float]
     details: Optional[Dict]
 
+class ProcessingTimeForEpisode(Model):
+    episode_id: str
+    user: str
+    user_type: UserType
+    processing_time: float
+    
+    model_config = {
+        "collection": "processing_times"
+    }

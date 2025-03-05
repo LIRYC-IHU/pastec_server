@@ -78,6 +78,7 @@ async def get_user_info(payload: dict = Depends(get_payload)) -> User:
             last_name=payload.get("family_name"),
             realm_roles=payload.get("realm_access", {}).get("roles", []),
             client_roles=payload.get("resource_access", {}).get(KEYCLOAK_CLIENT_ID, {}).get("roles", []),
+            groups=payload.get("groups", [])
         )
     except Exception as e:
         logger.error(f"Error extracting user info: {str(e)}")
