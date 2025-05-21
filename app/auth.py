@@ -138,12 +138,32 @@ async def get_refresh_token(refresh_token: str) -> dict:
             detail=f"Failed to refresh token: {str(e)}"
         )
 # Combine User and Application Authentication
+def _is_service_account(payload: dict) -> bool:
+    """
+    Retourne True si le jeton provient d’un service-account (client Keycloak)
+    """
+    return payload.get("preferred_username", "").startswith("service-account-")
+            #            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 async def get_auth_info(payload: dict = Depends(get_payload)):
+    """
+    - Human user  → {"type": "user",        "info": User(...)}
+    - AI client   → {"type": "application", "info": AIModel(...)}
+    """
     try:
-        if "preferred_username" in payload:
-            return {"type": "user", "info": await get_user_info(payload)}
+        if _is_service_account(payload):
+            # Jeton d’un client / modèle IA
+            return {
+                "type": "application",
+                "info": await get_ai_model_info(payload)
+            }
         else:
-            return {"type": "application", "info": await get_ai_model_info(payload)}
+            # Jeton d’un utilisateur humain
+            return {
+                "type": "user",
+                "info": await get_user_info(payload)
+            }
+
     except Exception as e:
-        logger.error(f"Error in get_auth_info: {str(e)}")
-        raise HTTPException(status_code=401, detail="Authentication failed")
+        logger.error(f"Error in get_auth_info: {e}")
+        raise HTTPException(401, "Authentication failed")

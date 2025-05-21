@@ -4,9 +4,10 @@ from typing import Dict, Any
 class Config:
     """Configuration globale du worker"""
     
-    KEYCLOAK_URL = os.getenv("KEYCLOAK_URL", "http://keycloak:8080")
+    KEYCLOAK_URL = os.getenv("KEYCLOAK_INTERNAL_SERVER_URL", "http://keycloak:8080")
     FASTAPI_URL = os.getenv("FASTAPI_URL", "http://api:8000")
     MONGODB_URL = os.getenv("MONGODB_URL", "mongodb://mongodb:27017")
+    KEYCLOAK_REALM = os.getenv("KEYCLOAK_REALM", "pastec")
     
     # Configuration des modèles
     MODEL_CONFIG = {

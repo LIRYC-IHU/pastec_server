@@ -222,3 +222,31 @@ async def get_job_status(
     except Exception as e:
         logger.error(f"Erreur lors de la récupération du statut du job {job_id}: {str(e)}")
         raise HTTPException(500, detail=f"Error getting job status: {str(e)}")
+    
+@ai_router.get("/{job_id}/episode_type")
+async def get_episode_type(
+    job_id: str,
+    user_info: User = Depends(get_user_info)
+) -> JSONResponse:
+    logger.info(f"Requête reçue pour obtenir le type d'épisode pour le job {job_id} par l'utilisateur {user_info.username}")
+    
+    try:
+        # Rechercher le job par son ID
+        job = await engine.find_one(Job, Job.job_id == job_id)
+        if not job:
+            raise HTTPException(404, detail='No job with this ID.')
+        
+        episode = await engine.find_one(Episode, Episode.episode_id == job.episode_id)
+        if not episode:
+            raise HTTPException(404, detail='No episode with this ID.')
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "manufacturer": episode.manufacturer,
+                "episode_type": episode.episode_type
+            }
+        )
+    except Exception as e:
+        logger.error(f"Erreur lors de la récupération du type d'épisode pour le job {job_id}: {str(e)}")
+        raise HTTPException(500, detail=f"Error getting episode type: {str(e)}")

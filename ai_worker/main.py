@@ -7,6 +7,7 @@ import os
 import sys
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from models import TaskData
+import test_keys
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -35,3 +36,16 @@ async def get_queue_status():
 async def get_job_status(job_id: str):
     """Récupère le statut d'une tache dans la queue via son job_id"""
     return task_queue.get_job_status(job_id)
+
+@app.get('/test')
+async def test():
+    """Test de la connexion avec le serveur FastAPI"""
+    try:
+        egm = await test_keys.e2e()
+        
+        return {
+            "message": "Test réussi",
+            "egm": egm.decode('utf-8')  # Convertir les octets en chaîne de caractères
+        }# Convertir les octets en chaîne de caractères}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur lors du test: {str(e)}")

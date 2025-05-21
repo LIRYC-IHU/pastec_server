@@ -17,3 +17,6 @@ numpy==1.26
 matplotlib
 scikit-learn>=1.0.0
 pyjwt
+pytest
+pytest-asyncio
+python-keycloak

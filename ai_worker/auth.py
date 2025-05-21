@@ -3,60 +3,162 @@ import os
 from motor.motor_asyncio import AsyncIOMotorClient
 from cryptography.hazmat.primitives.serialization import load_pem_private_key
 from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import serialization
 import logging
 import jwt
-import datetime
+import datetime as dt
 import httpx
 from fastapi import HTTPException
+from base64 import b64decode
+from pathlib import Path
+from cryptography.hazmat.primitives.serialization import pkcs12, Encoding, PublicFormat
+import hashlib, base64
+from uuid import uuid4
+from typing import Optional, Union
+from keycloak import KeycloakAdmin
 
 logger = logging.getLogger(__name__)
 
-def load_private_key_from_pem(pem_path):
-    """Charge la clé privée depuis un fichier PEM"""
-    try:
-        with open(pem_path, "rb") as pem_file:
-            pem_data = pem_file.read()
-        private_key = load_pem_private_key(pem_data, password=None, backend=default_backend())
-        logger.info(f"Private key loaded successfully: {private_key}")
-        return private_key
-    except Exception as e:
-        logger.error(f"Erreur lors du chargement de la clé privée : {str(e)}")
-        raise ValueError("Impossible de charger la clé privée")
+def load_private_key(path: Union[str, Path]):
+    """
+    Charge une clé privée depuis :un fichier PEM (-----BEGIN PRIVATE KEY-----)  
 
-async def get_jwt_token(application_name: str, pem_path: str) -> str:
-    """Génère un JWT signé avec la clé privée"""
-    private_key = load_private_key_from_pem(pem_path)
+    Args: path: chemin du fichier.
+
+    Returns:
+        private_key (RSAPrivateKey | EllipticCurvePrivateKey | None)
+    """
+    path = Path(path)
+
     try:
-        logger.info("Starting to generate the JWT token with private key")
-        
-        if private_key is None:
-            raise ValueError("Failed to load private key")
-        
-        keycloak_server_url = os.getenv('KEYCLOAK_SERVER_URL')
-        logger.info(f"server url: {keycloak_server_url}")
-        keycloak_realm = os.getenv('KEYCLOAK_REALM')
-        logger.info(f"realm: {keycloak_realm}")
-        
-        if not keycloak_server_url or not keycloak_realm:
-            raise ValueError("KEYCLOAK_SERVER_URL or KEYCLOAK_REALM environment variables are not set")
-        
-        payload = {
-            "iss": application_name,
-            "sub": application_name,
-            "aud": f"{keycloak_server_url}/realms/{keycloak_realm}",
-            "exp": int((datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=5)).timestamp()),
-            "iat": int(datetime.datetime.now(datetime.timezone.utc).timestamp())
-        }
-       
-        token = jwt.encode(payload, private_key, algorithm="RS256")
-        
-        logger.info("JWT token generated successfully")
-        logger.info(token)
-        return token
-    
+        data = path.read_bytes()
+
+        key = serialization.load_pem_private_key(
+            data,
+            password=None,
+            backend=default_backend()
+        )
+        logger.info("✅  Private key loaded from PEM")
+        return key
+
     except Exception as e:
-        logger.error(f"Error generating the JWT token: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error generating JWT: {str(e)}")
+        logger.error(f"❌  Failed to load private key: {e}")
+        raise
+    
+async def get_access_token(client_id: str,
+                           key_path: str,
+                           lifetime: int = 300) -> str:
+    """
+    Authenticate *this* AI service against Keycloak using
+    Private-Key JWT and return a regular access-token.
+
+    Parameters
+    ----------
+    client_id      : the Keycloak *Client ID* (e.g. "ai_bsc_af")
+    key_path       : path to the PEM or PKCS#12 file holding the **private** key
+    key_password   : password for the PKCS#12 (None for PEM or unprotected .p12)
+    lifetime       : JWT assertion lifetime, seconds (default 5 min)
+
+    Returns
+    -------
+    str – Keycloak access token
+    """
+    # 1) Load private key ------------------------------------------------------
+    private_key = load_private_key(key_path)
+    if private_key is None:
+        raise HTTPException(500, "Unable to load private key")
+    
+    realm   = os.getenv("KEYCLOAK_REALM")
+    host    = os.getenv("KEYCLOAK_INTERNAL_SERVER_URL")  
+
+    kc = KeycloakAdmin(
+        server_url=f"{host}",
+        username="pastec-admin",
+        password="test",
+        realm_name="pastec",
+        verify=True
+    )
+    
+    logger.info("keycloak admin client created: " + str(kc))
+    
+    logger.info(f"trying to get client_id {client_id}")
+    logger.info(f"Keycloak URL: {host}")
+    logger.info(f"Keycloak realm: {realm}")
+    logger.info(f"username: pastec-admin")
+    logger.info(f"password: test")
+    
+    try: 
+        clients = kc.get_clients()
+        logger.info(f"nombre de clients: {len(clients)}")
+        uuid = kc.get_client_id(client_id)
+        if uuid is None:
+            logger.error(f"Client ID {client_id} not found in Keycloak")
+            raise HTTPException(500, f"Client ID {client_id} not found in Keycloak")
+        logger.info(f"Client ID {client_id} found in Keycloak: {uuid}")
+    except Exception as e:
+        logger.error(f"Error fetching client ID {client_id}: {e}")
+        raise HTTPException(500, f"Error fetching client ID {client_id}: {e}")
+
+    # 2) Build client-assertion -----------------------------------------------
+    realm   = os.getenv("KEYCLOAK_REALM")
+    host    = os.getenv("KEYCLOAK_INTERNAL_SERVER_URL") 
+    domain = os.getenv("KEYCLOAK_SERVER_URL")
+    
+    # e.g. https://kc.example.com
+    if not (realm and host):
+        logger.error("KEYCLOAK_* env-vars missing")
+        logger.error(f"KEYCLOAK_REALM: {realm}")
+        logger.error(f"KEYCLOAK_URL: {host}")   
+        raise HTTPException(500, "KEYCLOAK_* env-vars missing")
+
+    token_endpoint = f"{host}/realms/{realm}/protocol/openid-connect/token"
+    domain_endpoint = f"{domain}/realms/{realm}/protocol/openid-connect/token"
+    
+    logger.info(f"Keycloak token endpoint: {token_endpoint}")
+
+    now = int(dt.datetime.now(dt.timezone.utc).timestamp())
+    
+    assertion_payload = {
+        "iss": client_id,  # **must** be the client ID
+        "sub": client_id,  # **must** be the client ID
+        "aud": domain_endpoint,    # **must** be the exact token URL
+        "iat": now,
+        "exp": now + lifetime,
+        "jti": str(uuid4()),  # unique ID for this assertion
+    }
+
+    public_key = private_key.public_key()
+    der = public_key.public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
+    sha256 = hashlib.sha256(der).digest()
+    kid = base64.urlsafe_b64encode(sha256).rstrip(b'=').decode()
+    
+    headers = {
+        "kid": kid
+    }
+
+    client_assertion = jwt.encode(assertion_payload,
+                                  private_key,
+                                  algorithm="RS256",
+                                  headers=headers)
+    
+    # 3) Exchange assertion for an access-token -------------------------------
+    data = {
+        "grant_type": "client_credentials",
+        "client_id": client_id,
+        "client_assertion_type":
+            "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+        "client_assertion": client_assertion
+    }
+
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.post(token_endpoint, data=data)
+        if resp.status_code != 200:
+            raise HTTPException(resp.status_code,
+                                f"Keycloak token request failed: {resp.text}")
+
+        token = resp.json()["access_token"]
+        logger.info(f"Keycloak token obtained for client_id {client_id}: {token}")
+        return token
 
 async def fetch_egm(episode_id: str, headers: dict):
     """Récupère l'EGM d'un épisode"""
@@ -69,6 +171,7 @@ async def fetch_egm(episode_id: str, headers: dict):
         else:
             logger.error(f"Erreur lors de l'obtention de l'EGM: {response.status_code} {response.text}")
             response.raise_for_status()
+            
 
 def get_mongodb_client() -> AsyncIOMotorClient:
     return AsyncIOMotorClient(os.getenv('MONGODB_URL'))

@@ -15,9 +15,9 @@ class Token(BaseModel):
 class User(BaseModel):
     id: str
     username: str
-    email: str
-    first_name: str
-    last_name: str
+    email: Optional[str]
+    first_name: Optional[str]
+    last_name: Optional[str]
     realm_roles: list
     client_roles: list
     groups: list

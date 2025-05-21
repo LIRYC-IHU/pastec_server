@@ -7,7 +7,8 @@ from models import AIJob, ModelRegistry, TaskData
 import httpx
 from bson import ObjectId
 import os
-from auth import get_jwt_token
+from auth import get_access_token
+from operator import attrgetter
 
 logger = logging.getLogger(__name__)
 
@@ -50,12 +51,13 @@ class AITaskQueue:
         try:
             # Récupération de l'EGM
             egm_data = await self._fetch_egm(job_id, id_model)
+            manufacturer, episode_type = attrgetter('manufacturer', 'episode_type')(await self.fetch_episode_type(job_id, id_model))
 
             if not egm_data:
                 raise ValueError(f"Aucune donnée EGM reçue pour job_id: {job_id}")
 
             # Exécution de l'inférence
-            prediction = await self.model_registry.run_inference(id_model, egm_data)
+            prediction = await self.model_registry.run_inference(id_model, egm_data, episode_type)
 
             # Soumission du résultat
             await self._submit_annotation(job_id, prediction, id_model)
@@ -67,8 +69,8 @@ class AITaskQueue:
     async def _fetch_egm(self, job_id: str, id_model: str) -> bytes:
         """Récupère l'EGM depuis l'API"""
         async with httpx.AsyncClient() as client:
-            key_model_path = f"/ai_worker/private_keys/private_key_{id_model}.pem"
-            token = await get_jwt_token(id_model, key_model_path)
+            key_model_path = f"/ai_worker/private_keys/key_{id_model}.pem"
+            token = await get_access_token(id_model, key_model_path)
             headers = {'Authorization': f'Bearer {token}'}
 
             try:
@@ -93,6 +95,26 @@ class AITaskQueue:
             except httpx.HTTPStatusError as e:
                 logger.error(f"Erreur HTTP lors de la récupération de l'EGM: {e}")
                 raise ValueError(f"Erreur HTTP {e.response.status_code} lors de la récupération de l'EGM")
+    
+    async def _fetch_episode_type(job_id: str, id_model: str) -> Dict:
+
+        url = f"{os.getenv('FASTAPI_URL')}/ai/{job_id}/episode_type"
+        
+        async with httpx.AsyncClient() as client:
+            key_model_path = f"/ai_worker/private_keys/key_{id_model}.pem"
+            token = await get_access_token(id_model, key_model_path)
+            headers = {'Authorization': f'Bearer {token}'}
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, headers=headers)
+            
+            if response.status_code == 200:
+                logger.info(f"Type d'épisode obtenu avec succès pour job_id: {job_id}")
+                return response.json()
+            else:
+                logger.error(f"Erreur lors de l'obtention du type d'épisode: {response.status_code} {response.text}")
+                response.raise_for_status()
+
 
     async def _submit_annotation(
         self,
@@ -101,7 +123,7 @@ class AITaskQueue:
         id_model: str
     ) -> AIJob:
         """Soumet l'annotation à l'API"""
-        logger.info(f"prediction:{prediction}");
+        logger.info(f"prediction:{prediction}")
         ai_job = AIJob(
             job_id=job_id,
             id_model=id_model,
@@ -111,7 +133,7 @@ class AITaskQueue:
         )
         
         async with httpx.AsyncClient() as client:
-            token = await get_jwt_token(id_model, pem_path=f"/ai_worker/private_keys/private_key_{id_model}.pem")
+            token = await get_access_token(id_model, f"/ai_worker/private_keys/key_{id_model}.pem")
             headers = {'Authorization': f'Bearer {token}'}
             response = await client.put(
                 f"{os.getenv('FASTAPI_URL')}/ai/{job_id}/annotation",

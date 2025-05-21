@@ -2,6 +2,12 @@ FROM python:3.9-slim
 
 WORKDIR /ai_worker
 
+ENV DEBIAN_FRONTEND=noninteractive \
+    APT_FLAGS="-o Acquire::Retries=5 -o Acquire::http::Timeout=30"
+
+# Force apt to use IPv4 if IPv6 is flaky in your env
+RUN echo 'Acquire::ForceIPv4 "true";' > /etc/apt/apt.conf.d/99force-ipv4
+
 RUN apt-get update && apt-get upgrade -y
 
 # Installation des dépendances système nécessaires
@@ -24,7 +30,6 @@ RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 # Création du répertoire ai_models et copie des scripts
 RUN mkdir -p /ai_worker/ai_models
 COPY ./ai_models /ai_worker/ai_models
-COPY ./private_keys /ai_worker/private_keys
 
 # Copie du reste du code source
 COPY . .

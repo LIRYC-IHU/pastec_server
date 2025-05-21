@@ -135,6 +135,8 @@ class KeycloakService:
             client_id = ai_client["client_id"]
             client_name = ai_client["client_name"]
             
+            logger.info(f"Searching roles for client: {client_name} ({client_id})")
+            
             account_id_url = f"{self.keycloak_url}/admin/realms/{self.realm}/clients/{client_id}/service-account-user"
             logger.debug(f"Roles URL: {account_id_url}")
             
