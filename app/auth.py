@@ -50,6 +50,8 @@ async def get_public_key(kid: str):
 async def decode_token(token: str, audience: str) -> dict:
     try:
         unverified_header = get_unverified_header(token)
+        logger.info("Vérification du token...")
+        logger.info(token)
         logger.info(f"En-tête non vérifié du token: {unverified_header}")
         payload = decode(token, options={"verify_signature": False}, algorithms=["RS256"])
         logger.info(f"Payload décodé: {payload}")
@@ -69,6 +71,7 @@ async def get_payload(token: str = Security(oauth2_scheme)):
 
 # Get User Info from Token
 async def get_user_info(payload: dict = Depends(get_payload)) -> User:
+    logger.info("Human User Authentication")
     try:
         return User(
             id=payload.get("sub"),
@@ -78,7 +81,7 @@ async def get_user_info(payload: dict = Depends(get_payload)) -> User:
             last_name=payload.get("family_name"),
             realm_roles=payload.get("realm_access", {}).get("roles", []),
             client_roles=payload.get("resource_access", {}).get(KEYCLOAK_CLIENT_ID, {}).get("roles", []),
-            groups=payload.get("groups", [])
+            groups=payload.get("group-membership", [])
         )
     except Exception as e:
         logger.error(f"Error extracting user info: {str(e)}")
@@ -107,6 +110,7 @@ async def get_ai_model_info(payload: dict = Depends(get_payload)) -> AIModel:
 # Get Token with Username and Password
 async def get_token_with_credentials(username: str, password: str) -> dict:
     try:
+        logger.info("Authenticating user with username and password")
         return keycloak_openid.token(
             username=username, password=password, grant_type="password"
         )

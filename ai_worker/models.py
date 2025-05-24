@@ -47,7 +47,7 @@ class ModelRegistry:
         except Exception as e:
             logger.error(f"Erreur lors du listage des modèles: {str(e)}", exc_info=True)
     
-    async def run_inference(self, id_model: str, egm_data: bytes, episode_type: Optional[str]) -> Dict:
+    async def run_inference(self, id_model: str, egm_data: bytes, episode_type: str) -> Dict:
         """Exécute l'inférence sur un modèle spécifique"""
         if id_model not in self._models:
             raise ValueError(f"Modèle {id_model} non trouvé")

@@ -607,9 +607,11 @@ async def put_episode_annotation(
         # Créer la nouvelle annotation avec le bon type d'utilisateur
         if auth_info['type'] == 'user':
             user = auth_info['info']
+            logger.info("user group: ", user.groups[0][1:] )
+            group = user.groups[0][1:]
             new_annotation = Annotation(
                 user=user.username,
-                user_type=UserType(user.groups[0]),  # ou choisir le type approprié selon votre logique
+                user_type=UserType(group),  # ou choisir le type approprié selon votre logique
                 label=label,
                 details=details  # Champ optionnel
             )

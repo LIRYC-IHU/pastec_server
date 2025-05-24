@@ -51,13 +51,13 @@ class AITaskQueue:
         try:
             # Récupération de l'EGM
             egm_data = await self._fetch_egm(job_id, id_model)
-            manufacturer, episode_type = attrgetter('manufacturer', 'episode_type')(await self.fetch_episode_type(job_id, id_model))
+            episode_type_data = await self._fetch_episode_type(job_id, id_model)
 
             if not egm_data:
                 raise ValueError(f"Aucune donnée EGM reçue pour job_id: {job_id}")
 
             # Exécution de l'inférence
-            prediction = await self.model_registry.run_inference(id_model, egm_data, episode_type)
+            prediction = await self.model_registry.run_inference(id_model, egm_data, episode_type_data.get('episode_type'))
 
             # Soumission du résultat
             await self._submit_annotation(job_id, prediction, id_model)
@@ -96,7 +96,7 @@ class AITaskQueue:
                 logger.error(f"Erreur HTTP lors de la récupération de l'EGM: {e}")
                 raise ValueError(f"Erreur HTTP {e.response.status_code} lors de la récupération de l'EGM")
     
-    async def _fetch_episode_type(job_id: str, id_model: str) -> Dict:
+    async def _fetch_episode_type(self, job_id: str, id_model: str) -> dict:
 
         url = f"{os.getenv('FASTAPI_URL')}/ai/{job_id}/episode_type"
         
@@ -110,6 +110,7 @@ class AITaskQueue:
             
             if response.status_code == 200:
                 logger.info(f"Type d'épisode obtenu avec succès pour job_id: {job_id}")
+                logger.info(f"Type d'épisode: {response.json()}")
                 return response.json()
             else:
                 logger.error(f"Erreur lors de l'obtention du type d'épisode: {response.status_code} {response.text}")
