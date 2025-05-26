@@ -430,7 +430,7 @@ async def post_processing_time(
         raise HTTPException(403, "User information is missing")
     
     username = user.username
-    user_type = user.groups[0]
+    user_type = user.groups[0][1:]
     
     try:
         processing_time = float(processing_time)
