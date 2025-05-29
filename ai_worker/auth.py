@@ -73,9 +73,9 @@ async def get_access_token(client_id: str,
 
     kc = KeycloakAdmin(
         server_url=f"{host}",
-        username="pastec-admin",
-        password="test",
-        realm_name="pastec",
+        username=os.getenv("KEYCLOAK_PASTEC_ADMIN"),
+        password=os.getenv("KEYCLOAK_PASTEC_ADMIN_PASSWORD"),
+        realm_name=os.getenv("KEYCLOAK_REALM"),
         verify=True
     )
     
@@ -157,7 +157,6 @@ async def get_access_token(client_id: str,
                                 f"Keycloak token request failed: {resp.text}")
 
         token = resp.json()["access_token"]
-        logger.info(f"Keycloak token obtained for client_id {client_id}: {token}")
         return token
 
 async def fetch_egm(episode_id: str, headers: dict):

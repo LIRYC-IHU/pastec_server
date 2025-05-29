@@ -51,10 +51,7 @@ async def decode_token(token: str, audience: str) -> dict:
     try:
         unverified_header = get_unverified_header(token)
         logger.info("Vérification du token...")
-        logger.info(token)
-        logger.info(f"En-tête non vérifié du token: {unverified_header}")
         payload = decode(token, options={"verify_signature": False}, algorithms=["RS256"])
-        logger.info(f"Payload décodé: {payload}")
         return payload
     except Exception as e:
         logger.error(f"Erreur lors du décodage du token: {str(e)}")
@@ -121,7 +118,7 @@ async def get_token_with_credentials(username: str, password: str) -> dict:
 async def get_refresh_token(refresh_token: str) -> dict:
     try:
         logger.info("Début du refresh token...")
-        logger.debug(f"Refresh token reçu (tronqué): {refresh_token[:20]}...")
+        logger.debug("Refresh token reçu")
         
         # Récupérer le token rafraîchi
         token_response = keycloak_openid.refresh_token(refresh_token)

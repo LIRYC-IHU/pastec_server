@@ -19,6 +19,8 @@ import soundfile as sf
 
 import datetime
 
+import io
+
 
 
 logger = logging.getLogger(__name__)
@@ -50,7 +52,7 @@ class BIOTRONIK_AF:
 
 
 
-    async def inference(self, egm_data: bytes) -> dict:
+    async def inference(self, egm_data: bytes, traceType: str) -> dict:
 
         """Fonction d'inférence pour le modèle BIOTRONIK AF"""
 
@@ -77,24 +79,24 @@ class BIOTRONIK_AF:
             # normalize signal
             # get last 10 seconds or zero_padd untill 10 seconds
 
+        # A-trace
         if 'ATrace' in episode:
-            
-            atrial_signal = BIOTRONIK_AF.normalize( episode['ATrace'] )
-            
-            atrial_signal = BIOTRONIK_AF.updateTraceLength( atrial_signal )
-            
-        if 'VTrace' in episode:
-            
-            ventricular_signal = BIOTRONIK_AF.normalize( episode['VTrace'] )
-            
-        elif 'VDTrace' in episode:
-            
-            ventricular_signal = BIOTRONIK_AF.normalize( episode['VDTrace'] )
-            
+            atrial_signal = BIOTRONIK_AF.updateTraceLength(episode['ATrace'])
+            atrial_signal = BIOTRONIK_AF.normalize(atrial_signal)
         else:
-            ventricular_signal = np.zeros_like( atrial_signal )
- 
-        ventricular_signal = BIOTRONIK_AF.updateTraceLength( ventricular_signal )
+            # fallback to ten seconds of zeros
+            atrial_signal = np.zeros(128 * 10)
+
+        # V-trace / VD-trace
+        if 'VTrace' in episode:
+            ventricular_signal = BIOTRONIK_AF.updateTraceLength(episode['VTrace'])
+            ventricular_signal = BIOTRONIK_AF.normalize(ventricular_signal)
+        elif 'VDTrace' in episode:
+            ventricular_signal = BIOTRONIK_AF.updateTraceLength(episode['VDTrace'])
+            ventricular_signal = BIOTRONIK_AF.normalize(ventricular_signal)
+        else:
+            # pad zeros to same length as atrial
+            ventricular_signal = np.zeros_like(atrial_signal)
  
  
         input_model = np.stack( ( atrial_signal, ventricular_signal ), axis=1 ).reshape(1, 1280, 2) 
@@ -105,13 +107,9 @@ class BIOTRONIK_AF:
         
         prediction = np.argmax( raw_prediction, axis=1 )
        
-        #TODO UPDATED - overrule prediction
-        #if no signal was able to get extracted from the episode
-        # overrule the prediction and show error.
-        if atrial_signal.size < 1:  
-            
-            prediction = 3
-       
+        prediction_idx = int(np.argmax(raw_prediction, axis=1))   # → 0, 1, 2 …
+        confidence      = float(np.max(raw_prediction))   
+        
         
         # Correspondance des prédictions numériques aux étiquettes textuelles
 
@@ -121,23 +119,19 @@ class BIOTRONIK_AF:
 
             1: "Noise",
 
-            2: "Oversensing",
-            
-            3: "Error: no signal found" #TODO UPDATED - new classification to show error
+            2: "Oversensing"
 
         }
 
-
-
         # Conversion en entier avant la correspondance
 
-        if isinstance(prediction, np.ndarray):
+        if isinstance(prediction_idx, np.ndarray):
 
             logger.error(f"Type incorrect de prédiction: {type(prediction)} -> {prediction}")
 
 
 
-        prediction_text = prediction_labels.get(prediction, "Unknown")
+        prediction_text = prediction_labels.get(prediction_idx, "Unknown")
 
         logger.info(f"Prédiction obtenue: {prediction_text}")
 
@@ -170,15 +164,10 @@ class BIOTRONIK_AF:
                 textElementsIndices.append(i) 
         textElementsText = [text.text for text in textElements]
         
-        if fileType == 'Monitorage atrial': #TODO UPDATED 4 lines below
-            if 'Prédétection' in textElementsText: 
-                pageSearch = 'Prédétection'
-            elif 'Monitorage atrial' in textElementsText:
-                pageSearch = 'Monitorage atrial'
+        if fileType == 'Monitorage atrial':
+            pageSearch = 'Prédétection'
         elif fileType == 'TA':
             pageSearch = 'TA'
-        elif fileType == 'Commut. Mode':
-            pageSearch = 'Commut. Mode'
         elif fileType == 'EGM périodique':
             if 'Normal' in textElementsText:
                 pageSearch = 'Normal'
@@ -424,7 +413,8 @@ class BIOTRONIK_AF:
     # function get information from SVG file
     def extractInfoSVG( svgFile, fileType, center = [] ):
         #load the svg file and extract important elements (G and text elements)
-        tree = ET.parse(svgFile)
+        svg_stream = io.BytesIO(svgFile)
+        tree = ET.parse(svg_stream)
         root = tree.getroot()
         nameSpace = {'svg': root.tag.split('}')[0].strip('{')}
         
@@ -515,7 +505,7 @@ def register_model(registry):
 
         model = BIOTRONIK_AF()
 
-        registry._models["BIOTRONIK_AF"] = {
+        registry._models["ai_bio_af"] = {
 
             "inference_fn": model.inference,
 
