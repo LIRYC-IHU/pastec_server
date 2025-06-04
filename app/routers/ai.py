@@ -13,6 +13,7 @@ import os
 from bson.binary import Binary
 from settings import AI_WORKER_URL
 from starlette.background import BackgroundTask
+from services.keycloak_service import KeycloakService, upload_key
 
 
 logger = logging.getLogger(__name__)
@@ -250,3 +251,85 @@ async def get_episode_type(
     except Exception as e:
         logger.error(f"Erreur lors de la récupération du type d'épisode pour le job {job_id}: {str(e)}")
         raise HTTPException(500, detail=f"Error getting episode type: {str(e)}")
+    
+@ai_router.post("/model_registration")
+async def register_model(
+    model_name: str,
+    user_info: User = Depends(get_user_info)
+) -> JSONResponse:
+    try:
+        logger.info(f'client roles: {user_info.client_roles}')
+        
+        if 'create-client' not in user_info.client_roles:
+            logger.error(f"User {user_info.username} does not have permission to register models")
+            raise HTTPException(403, detail="You do not have permission to register models")
+    
+        service = KeycloakService()
+        r = await service.register_new_model(
+            model_name=model_name,
+            description=f"AI model {model_name} registration",
+            h5_file= None,  # Assuming you will handle file upload separately
+            py_file= None,  # Assuming you will handle file upload separately
+        )
+        
+        return JSONResponse(
+            status_code=201,
+            content={
+                "message": f"Model {model_name} registered successfully",
+                "model_name": model_name
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Erreur lors de l'enregistrement du modèle {model_name}: {str(e)}")
+        raise HTTPException(500, detail=f"Error registering model: {str(e)}")
+    
+@ai_router.get("/{client_id}/client_representation")
+async def get_client_representation( 
+    client_id: str,
+    user_info: User = Depends(get_user_info)
+) -> JSONResponse:
+    try:
+        logger.info(f"Requête reçue pour obtenir la représentation du client par l'utilisateur {user_info.username}")
+        service = KeycloakService()
+        client_representation = await service.get_client_rep(client_id)
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "client_representation": client_representation
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Erreur lors de la récupération de la représentation du client: {str(e)}")
+        raise HTTPException(500, detail=f"Error getting client representation: {str(e)}")
+
+@ai_router.post('/key_pair')
+async def create_key_pair(
+    client_id: str,
+    user_info: User = Depends(get_user_info)
+) -> FileResponse:
+    try:
+        logger.info(f"Requête reçue pour créer une paire de clés pour le client {client_id} par l'utilisateur {user_info.username}")
+    
+        private_key = await upload_key(client_id)
+        
+        logger.info(f"Clé générée pour le client {client_id}: {private_key is not None}")
+        logger.info(f"Type de la clé privée: {type(private_key)}")
+        logger.info(private_key[:100])
+        
+        temp_file = f"/tmp/ai_{client_id}.pem"
+        with open(temp_file, "wb") as f:
+            f.write(private_key)
+        
+        return FileResponse(
+            path=temp_file,
+            filename=f"ai_{client_id}.pem",
+            media_type="application/x-pem-file",
+            background=BackgroundTask(lambda: os.remove(temp_file))
+        )
+        
+    except Exception as e:
+        logger.error(f"Erreur lors de la création de la paire de clés pour le client {client_id}: {str(e)}")
+        raise HTTPException(500, detail=f"Error creating key pair: {str(e)}")

@@ -8,6 +8,7 @@ import sys
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from models import TaskData
 import test_keys
+from fastapi.responses import JSONResponse
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -37,15 +38,20 @@ async def get_job_status(job_id: str):
     """Récupère le statut d'une tache dans la queue via son job_id"""
     return task_queue.get_job_status(job_id)
 
-@app.get('/test')
-async def test():
+@app.post('/test')
+async def test(
+    client_id: str
+) -> JSONResponse:
     """Test de la connexion avec le serveur FastAPI"""
     try:
-        egm = await test_keys.e2e()
+        egm = await test_keys.e2e(client_id)
         
-        return {
-            "message": "Test réussi",
-            "egm": egm.decode('utf-8')  # Convertir les octets en chaîne de caractères
-        }# Convertir les octets en chaîne de caractères}
+        return  JSONResponse(
+            status_code=200,
+            content={
+                "message": "Test réussi",
+                "egm": egm.decode('utf-8')  # Convertir les octets en chaîne de caractères
+            }
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur lors du test: {str(e)}")

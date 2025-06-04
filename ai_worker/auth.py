@@ -78,16 +78,9 @@ async def get_access_token(client_id: str,
         realm_name=os.getenv("KEYCLOAK_REALM"),
         verify=True
     )
-    
-    logger.info("keycloak admin client created: " + str(kc))
-    
-    logger.info(f"trying to get client_id {client_id}")
-    logger.info(f"Keycloak URL: {host}")
-    logger.info(f"Keycloak realm: {realm}")
-    logger.info(f"username: pastec-admin")
-    logger.info(f"password: test")
-    
+
     try: 
+        logger.info(f"trying to get client_id {client_id}")
         clients = kc.get_clients()
         logger.info(f"nombre de clients: {len(clients)}")
         uuid = kc.get_client_id(client_id)
@@ -97,7 +90,7 @@ async def get_access_token(client_id: str,
         logger.info(f"Client ID {client_id} found in Keycloak: {uuid}")
     except Exception as e:
         logger.error(f"Error fetching client ID {client_id}: {e}")
-        raise HTTPException(500, f"Error fetching client ID {client_id}: {e}")
+        raise HTTPException(500, f"Error fetching client ID")
 
     # 2) Build client-assertion -----------------------------------------------
     realm   = os.getenv("KEYCLOAK_REALM")
@@ -121,13 +114,14 @@ async def get_access_token(client_id: str,
     assertion_payload = {
         "iss": client_id,  # **must** be the client ID
         "sub": client_id,  # **must** be the client ID
-        "aud": domain_endpoint,    # **must** be the exact token URL
+        "aud": token_endpoint,    # **must** be the exact token URL
         "iat": now,
         "exp": now + lifetime,
         "jti": str(uuid4()),  # unique ID for this assertion
     }
 
     public_key = private_key.public_key()
+    
     der = public_key.public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
     sha256 = hashlib.sha256(der).digest()
     kid = base64.urlsafe_b64encode(sha256).rstrip(b'=').decode()

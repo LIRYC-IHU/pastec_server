@@ -6,13 +6,131 @@ BS 2024
 
 import httpx
 from fastapi import HTTPException
+from fastapi.responses import JSONResponse
+from typing import Optional, Union
+from keycloak import KeycloakAdmin, KeycloakOpenIDConnection
 import logging
 import os
 from typing import List, Dict
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives import serialization
+from cryptography import x509
+from cryptography.x509.oid import NameOID
+from cryptography.hazmat.primitives import hashes
+import datetime
 
 # Configuration détaillée du logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+
+def get_keycloak_admin() -> KeycloakAdmin:
+    """
+    Crée et retourne un client KeycloakAdmin configuré
+    à partir des variables d'environnement.
+    """
+    return KeycloakAdmin(
+        server_url        = os.getenv("KEYCLOAK_INTERNAL_SERVER_URL"),
+        username          = os.getenv("KEYCLOAK_PASTEC_ADMIN"),
+        password          = os.getenv("KEYCLOAK_PASTEC_ADMIN_PASSWORD"),
+        realm_name        = os.getenv("KEYCLOAK_REALM"),
+        client_id         = os.getenv("KEYCLOAK_ADMIN_CLIENT_ID", "admin-cli")
+    )
+
+def generate_certificate(subject: str, public_key, private_key, issuer: str= 'PASTEC Corp') -> x509.Certificate:
+    """
+    Génère un certificat X.509 auto-signé.
+    
+    Args:
+        subject (str): Le nom du sujet du certificat.
+        issuer (str): Le nom de l'émetteur du certificat.
+        public_key: La clé publique à inclure dans le certificat.
+        private_key: La clé privée pour signer le certificat.
+    
+    Returns:
+        x509.Certificate: Le certificat auto-signé.
+    """
+    subject_name = x509.Name([
+        x509.NameAttribute(NameOID.COMMON_NAME, subject),
+    ])
+    
+    issuer_name = x509.Name([
+        x509.NameAttribute(NameOID.COMMON_NAME, issuer),
+    ])
+    
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(subject_name)
+        .issuer_name(issuer_name)
+        .public_key(public_key)
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(datetime.datetime.utcnow())
+        .not_valid_after(datetime.datetime.utcnow() + datetime.timedelta(days=365))
+        .sign(private_key, hashes.SHA256())
+    )
+    
+    return cert
+
+async def upload_key(client_id: str) -> Union[bytes, JSONResponse]:
+        
+        kc = get_keycloak_admin()
+        
+        ## get client uuid
+        
+        uuid = kc.get_client_id(client_id)
+        if not uuid:
+            logger.error(f"Client {client_id} not found")
+            return JSONResponse(status_code=404, content={"error": "Client not found"})
+        
+        logger.info(f"Client UUID for {client_id}: {uuid}")
+        
+        # Générer une paire de clés RSA
+        private_key, public_key = generate_keys()
+        certificate = generate_certificate(
+            subject=client_id,
+            public_key=public_key,
+            private_key=private_key
+        )
+        
+        logger.info("Generated RSA key pair")
+        
+        # Convertir la clé publique en PEM
+        public_key_pem = public_key.public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo
+        )
+        
+        certificate_pem = certificate.public_bytes(
+            encoding=serialization.Encoding.PEM
+        )
+        logger.info("Converted public key to PEM format")
+        
+        logger.info(f"certificate content: {certificate_pem.decode('utf-8')}")
+        
+        try:
+            dict = kc.upload_certificate(uuid, certificate_pem.decode('utf-8'))
+            logger.info(f"Keycloak response: {dict}")
+            logger.info(f"Key uploaded successfully for client {client_id}")
+            return private_key.private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.PKCS8,
+                encryption_algorithm=serialization.NoEncryption()
+            )
+        except Exception as e:
+            logger.error(f"Failed to upload key for client {client_id}: {str(e)}")
+            return JSONResponse(status_code=500, content={"error": "Failed to upload key"})
+        
+def generate_keys():
+    """Générer une paire de clés RSA pour le client"""
+    private_key = rsa.generate_private_key(
+        public_exponent=65537,
+        key_size=2048,
+    )
+    public_key = private_key.public_key()
+    
+    return private_key, public_key
+    
+    
+
 
 class KeycloakService:
     def __init__(self):
@@ -180,3 +298,66 @@ class KeycloakService:
         except Exception as e:
             logger.error(f"Erreur lors de la recherche des rôles du client IA: {str(e)}", exc_info=True)
             return {}
+        
+    async def register_new_model(self, model_name: str, description: Optional[str], h5_file: Optional[bytes], py_file: Optional[bytes]) -> JSONResponse:
+        """Enregistrer un nouveau modèle dans Keycloak"""
+        try:
+            token = await self.get_admin_token()
+            
+            ## creation of a new client for the model
+            url = f"{self.keycloak_url}/admin/realms/{self.realm}/clients"
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json"
+            }
+            body = {
+                "name": model_name,
+                "description": description or "No description provided",
+                "clientId": model_name,
+                "clientAuthenticatorType": "client-jwt",
+                "enabled": True,
+                "protocol": "openid-connect",
+                "serviceAccountsEnabled": True,
+                "publicClient": False,
+                "consentRequired": False,
+                "standardFlowEnabled": False,
+                "implicitFlowEnabled": False,
+                "directAccessGrantsEnabled": False,
+            }
+            
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(url, headers=headers, json=body)
+                logger.debug(f"Client creation response status: {response.status_code}")
+                logger.debug(f"Client creation response headers: {dict(response.headers)}")
+                if response.status_code != 201:
+                    logger.error(f"Failed to create client: {response.status_code}")
+                    logger.error(f"Response body: {response.text}")
+                    return JSONResponse(status_code=500, content={"error": "Failed to create client"})
+                return JSONResponse(status_code=201, content={"message": "Client created successfully"})
+                    
+        except HTTPException as e:
+            logger.error(f"Failed to get admin token: {str(e)}")
+            return JSONResponse(status_code=500, content={"error": "Failed to get admin token"})
+        
+    async def get_client_rep(self, client_id: str):
+        """Obtenir la représentation d'un client"""
+        try:
+            token = await self.get_admin_token()
+            url = f"{self.keycloak_url}/admin/realms/{self.realm}/clients/{client_id}"
+            headers = {"Authorization": f"Bearer {token}"}
+            
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(url, headers=headers)
+                
+                if response.status_code != 200:
+                    logger.error(f"Failed to get client representation: {response.status_code}")
+                    logger.error(f"Response body: {response.text}")
+                    return None
+                
+                return response.json()
+                
+        except Exception as e:
+            logger.error(f"Error getting client representation: {str(e)}", exc_info=True)
+            return None
+        
+    
