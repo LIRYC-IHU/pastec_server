@@ -227,9 +227,9 @@ async def get_job_status(
 @ai_router.get("/{job_id}/episode_type")
 async def get_episode_type(
     job_id: str,
-    user_info: User = Depends(get_user_info)
+    auth_info: User = Depends(get_auth_info)
 ) -> JSONResponse:
-    logger.info(f"Requête reçue pour obtenir le type d'épisode pour le job {job_id} par l'utilisateur {user_info.username}")
+    logger.info(f"Requête reçue pour obtenir le type d'épisode pour le job {job_id} par l'utilisateur {auth_info}")
     
     try:
         # Rechercher le job par son ID

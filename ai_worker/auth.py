@@ -114,7 +114,7 @@ async def get_access_token(client_id: str,
     assertion_payload = {
         "iss": client_id,  # **must** be the client ID
         "sub": client_id,  # **must** be the client ID
-        "aud": token_endpoint,    # **must** be the exact token URL
+        "aud": domain_endpoint,    # **must** be the exact token URL
         "iat": now,
         "exp": now + lifetime,
         "jti": str(uuid4()),  # unique ID for this assertion
@@ -151,6 +151,8 @@ async def get_access_token(client_id: str,
                                 f"Keycloak token request failed: {resp.text}")
 
         token = resp.json()["access_token"]
+        logger.info(f"✅  Access token obtained for client_id {client_id}")
+        logger.debug(f"Access token: {token}")
         return token
 
 async def fetch_egm(episode_id: str, headers: dict):

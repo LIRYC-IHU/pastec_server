@@ -69,16 +69,24 @@ async def get_payload(token: str = Security(oauth2_scheme)):
 # Get User Info from Token
 async def get_user_info(payload: dict = Depends(get_payload)) -> User:
     logger.info("Human User Authentication")
+    logger.info(f"Payload: {payload}")
     try:
+        realm_access = payload.get("realm_access") or {}
+        resource_access = payload.get("resource_access") or {}
+        realm_roles = realm_access.get("roles", [])
+        client_roles = []
+        for info in resource_access.values():
+            client_roles += info.get("roles", [])
+        groups_claim = payload.get("group-membership") or []
         return User(
             id=payload.get("sub"),
             username=payload.get("preferred_username"),
             email=payload.get("email"),
             first_name=payload.get("given_name"),
             last_name=payload.get("family_name"),
-            realm_roles=payload.get("realm_access", {}).get("roles", []),
-            client_roles=payload.get("resource_access", {}).get('realm-management').get("roles", []),
-            groups=payload.get("group-membership", [])
+            realm_roles=realm_roles,
+            client_roles=client_roles,
+            groups=groups_claim 
         )
     except Exception as e:
         logger.error(f"Error extracting user info: {str(e)}")

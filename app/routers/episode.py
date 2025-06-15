@@ -197,6 +197,7 @@ async def upload_episode(
     manufacturer: str = Form(...),
     episode_type: str = Form(...),
     age_at_episode: int = Form(...),
+    implant_model: str = Form(...),  # Champ à remplir si nécessaire
     episode_duration: str = Form(...),  # Correction du type de episode_duration
     episode_id: str = Form(...)
 ) -> JSONResponse:
@@ -220,6 +221,7 @@ async def upload_episode(
                     "patient_id": existing_episode.patient_id,
                     "manufacturer": existing_episode.manufacturer,
                     "episode_type": existing_episode.episode_type,
+                    "implant_model": existing_episode.implant_model,
                     "labels": labels,
                     "exists": True,
                     "annotated": True if existing_episode.annotations else False,
@@ -236,6 +238,7 @@ async def upload_episode(
             patient_id=patient_id,
             manufacturer=manufacturer_enum,
             episode_type=episode_type,
+            implant_model=implant_model,  # Champ à remplir si nécessaire
             age_at_episode=age_at_episode,
             episode_duration=episode_duration,
             annotations=[]
@@ -255,6 +258,8 @@ async def upload_episode(
             content={
                 "episode_id": episode.episode_id,
                 "patient_id": episode.patient_id,
+                "implant_model": episode.implant_model,
+                "age_at_episode": episode.age_at_episode,
                 "manufacturer": episode.manufacturer,
                 "episode_type": episode.episode_type,
                 "labels": labels,

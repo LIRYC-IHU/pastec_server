@@ -65,6 +65,7 @@ class Episode(Model):
     episode_type: str = Field(...)
     age_at_episode: int
     episode_duration: str = Field(...)
+    implant_model: str = Field(...)
     egm: Optional[Binary] = None
     annotations: List[Annotation] = []
     
