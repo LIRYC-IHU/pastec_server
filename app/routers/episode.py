@@ -5,8 +5,9 @@ import httpx
 from db import engine, Episode, Annotation, Job, JobStatus, Manufacturer, UserType, ProcessingTimeForEpisode, User, AIJob, EpisodeInfo
 from typing import List, Annotated, Dict, Optional
 from odmantic import ObjectId
+from fastapi.responses import JSONResponse
 from services.diagnosis_service import DiagnosisService
-from services.keycloak_service import KeycloakService
+from services.keycloak_service import get_keycloak_admin, get_clients_with_realm_role
 import logging
 from bson.binary import Binary
 from datetime import datetime
@@ -43,7 +44,7 @@ annotation_router = APIRouter(
 
 @episode_router.get("/search")
 async def search(
-    rights: Annotated[User, Depends(check_authorization("read-data"))],
+    rights: Annotated[User, Depends(check_authorization("read-region-db"))],
     episode_id: Optional[str] = Query(None),
     episode_type: Optional[str] = Query(None),
     manufacturer: Optional[str] = Query(None),
@@ -128,24 +129,11 @@ async def send_to_ai(manufacturer: str, episode_type: str, episode_id: str, jobs
     
     logger.info('Calling Keycloak Service...')
     
-    keycloak_service = KeycloakService()
-        # Vérification des variables chargées
-    logger.debug(f"Keycloak URL: {keycloak_service.keycloak_url}")
-    logger.debug(f"Realm: {keycloak_service.realm}")
-    logger.debug(f"Admin username: {keycloak_service.admin_username}")
-    logger.debug(f"Admin client ID: {keycloak_service.client_id}")
-
-    # Vérification des variables d’environnement
-    logger.debug(f"Environment KEYCLOAK_ADMIN: {os.getenv('KEYCLOAK_ADMIN')}")
+    realm_role = f"{manufacturer.lower()}.{episode_type}"
+    logger.info(f"Vérification des rôles pour le fabricant {manufacturer} et le type d'épisode {episode_type}")
     
-    
-    ai_client_list = await keycloak_service.get_ai_clients(manufacturer, episode_type)
-    ai_clients = []
-    for ai_client in ai_client_list:
-        roles = await keycloak_service.get_ai_client_roles(ai_client)
-        logger.info(f"Rôles trouvés pour {ai_client['client_name']}: {roles}")
-        if f"{manufacturer.lower()}.{episode_type}" in roles.get(ai_client['client_name'], []):
-            ai_clients.append(ai_client['client_name'])
+    ai_clients = get_clients_with_realm_role(role_name=realm_role)
+    logger.info(f"Clients trouvés pour le rôle {realm_role}: {ai_clients}")
 
     ai_available = len(ai_clients) > 0
     
@@ -162,17 +150,17 @@ async def send_to_ai(manufacturer: str, episode_type: str, episode_id: str, jobs
                 response = await client.post(
                     f"{AI_WORKER_URL}/process/{job_id}",
                     json={
-                        "id_model": ai_client,
+                        "id_model": ai_client["clientId"],
                         "job_id": job_id
                     }
                 )
-                logger.info(f"Requête envoyée à l'IA {ai_client}: {response.status_code}")
+                logger.info(f"Requête envoyée à l'IA {ai_client['clientId']}: {response.status_code}")
                 if response.status_code == 202:
-                    logger.info(f"Requête acceptée par l'IA {ai_client}, stockage du job ID dans mongodb sous la collection jobs")
+                    logger.info(f"Requête acceptée par l'IA {ai_client['clientId']}, stockage du job ID dans mongodb sous la collection jobs")
                     await engine.save(Job(
                         job_id=job_id,
                         episode_id=episode_id,
-                        id_model=ai_client,
+                        id_model=ai_client["clientId"],
                         status=JobStatus.PENDING,
                         created_at=datetime.utcnow(),
                         updated_at=datetime.utcnow(),
@@ -395,7 +383,7 @@ async def update_diagnosis(
 @episode_router.get("/diagnoses_labels/{manufacturer}")
 async def get_diagnoses(
     manufacturer: str,
-    auth_info: Annotated[User, Depends(check_authorization("read-data"))]  # Assurez-vous que l'utilisateur a le droit de lire les données
+    auth_info: Annotated[User, Depends(check_authorization("read-region-db"))]  # Assurez-vous que l'utilisateur a le droit de lire les données
 ) -> JSONResponse:
     """
     Récupère les diagnostics disponibles pour un fabricant et tous les épisodes possibles - permet d'améliorer la réactivité du plugin vs. une requête par épisode pour certains cas d'usage
@@ -423,7 +411,7 @@ async def get_diagnoses(
 
 @episode_router.post("/processing_time")
 async def post_processing_time(
-    auth: Annotated[User, Depends(check_authorization("update-episode"))],
+    auth: Annotated[User, Depends(check_authorization("annotate-episode"))],
     processing_time: str = Form(...),
     episode_id: str = Form(...),
 
@@ -481,9 +469,9 @@ Routes for EGM handling
 @egm_router.get("/{episode_id}/egm")
 async def get_episode_egm(
     episode_id: str, 
-    auth_info: dict = Depends(get_auth_info) 
+    auth: Annotated[User, Depends(check_authorization("read-region-db"))],
     ) -> FileResponse:
-    logger.info(f"Requête reçue pour obtenir l'EGM avec episode_id: {episode_id} et auth_info: {auth_info}")
+    logger.info(f"Requête reçue pour obtenir l'EGM avec episode_id: {episode_id} et auth_info: {auth}")
     """
     Récupère l'EGM d'un épisode spécifique
     
@@ -494,8 +482,6 @@ async def get_episode_egm(
     Returns:
     - FileResponse contenant l'EGM
     """
-    
-    logger.info(f"Requête reçue par {auth_info['type']}: {auth_info['info']}")
     
     try:
         # Rechercher l'épisode par son ID
@@ -596,7 +582,7 @@ async def post_episode_egm(
 @annotation_router.put("/{episode_id}/annotation")
 async def put_episode_annotation(
     episode_id: str,
-    auth_info: dict = Depends(get_auth_info),
+    auth_info: User = Depends(check_authorization("annotate-episode")),
     label: str = Body(..., embed=True),
     details: Optional[Dict] = Body(None)
 ) -> JSONResponse:

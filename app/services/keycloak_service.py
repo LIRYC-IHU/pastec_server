@@ -29,14 +29,24 @@ def get_keycloak_admin() -> KeycloakAdmin:
     """
     Crée et retourne un client KeycloakAdmin configuré
     à partir des variables d'environnement.
+    On désactive l'auto-refresh du token pour les clients publics.
     """
-    return KeycloakAdmin(
-        server_url        = os.getenv("KEYCLOAK_INTERNAL_SERVER_URL"),
-        username          = os.getenv("KEYCLOAK_PASTEC_ADMIN"),
-        password          = os.getenv("KEYCLOAK_PASTEC_ADMIN_PASSWORD"),
-        realm_name        = os.getenv("KEYCLOAK_REALM"),
-        client_id         = os.getenv("KEYCLOAK_ADMIN_CLIENT_ID", "admin-cli")
+    kc = KeycloakAdmin(
+        server_url=os.getenv("KEYCLOAK_INTERNAL_SERVER_URL"),
+        username=os.getenv("KEYCLOAK_PASTEC_ADMIN"),
+        password=os.getenv("KEYCLOAK_PASTEC_ADMIN_PASSWORD"),
+        realm_name=os.getenv("KEYCLOAK_REALM"),
+        client_id=os.getenv("KEYCLOAK_ADMIN_CLIENT_ID", "admin-cli"),
+        # pas de client_secret_key pour garder le mode public
+        verify=True,
     )
+    # désactive le rafraîchissement automatique du token
+    try:
+        kc.connection.auto_refresh_token = False
+    except AttributeError:
+        # pour les versions sans auto_refresh_token, ignore
+        pass
+    return kc
 
 def generate_certificate(subject: str, public_key, private_key, issuer: str= 'PASTEC Corp') -> x509.Certificate:
     """
@@ -250,8 +260,43 @@ def assign_roles_to_service_account(kc: KeycloakAdmin, client_uuid: str, roles: 
         kc.assign_realm_roles(user_id, [realm_role])
 
     logger.info(f"Assigned realm roles {existing_roles} to service-account '{client_uuid}'")
+    
+def get_clients_with_realm_role(role_name: str) -> List[Dict[str, str]]:
+    """
+    Retourne la liste des clients (service accounts) dont le service-account
+    possède le realm-role spécifié.
+    """
+    kc = get_keycloak_admin()
+    matching_clients: List[Dict[str, str]] = []
 
+    # Récupère tous les clients du realm
+    all_clients = kc.get_clients()
+    for client in all_clients:
+        # Ne considérer que les clients avec service account activé
+        if not client.get("serviceAccountsEnabled"):
+            continue
 
+        client_uuid = client["id"]
+        client_id = client.get("clientId")
+
+        # Récupère l'utilisateur du service account pour ce client
+        try:
+            sa_user = kc.get_client_service_account_user(client_uuid)
+            user_id = sa_user.get("id")
+        except Exception:
+            continue
+
+        if not user_id:
+            continue
+
+        # Récupère les realm-roles de ce service-account
+        user_realm_roles = [r["name"] for r in kc.get_realm_roles_of_user(user_id)]
+        if role_name in user_realm_roles:
+            matching_clients.append({"clientId": client_id, "clientUuid": client_uuid})
+
+    logger.info(f"Found {len(matching_clients)} clients with realm role '{role_name}'")
+    logger.info(f"Clients: {matching_clients}")
+    return matching_clients
     
 
 class KeycloakService:

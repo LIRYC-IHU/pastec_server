@@ -63,8 +63,6 @@ async def decode_token(token: str, audience: str) -> dict:
             headers={"WWW-Authenticate": "Bearer"},
         )
         
-
-        
 async def check_center_affiliation(token: str, center_name: str):
     try: 
         audience = f"{KEYCLOAK_SERVER_URL}/realms/{KEYCLOAK_REALM}"
@@ -96,11 +94,9 @@ async def get_user_info(payload: dict = Depends(get_payload)) -> User:
     logger.info(f"Payload: {payload}")
     try:
         realm_access = payload.get("realm_access") or {}
-        resource_access = payload.get("resource_access") or {}
+        resource_access = payload.get("resource_access")
         realm_roles = realm_access.get("roles", [])
-        client_roles = []
-        for info in resource_access.values():
-            client_roles += info.get("roles", [])
+        client_roles = resource_access + realm_roles
         groups_claim = payload.get("group-membership") or []
         return User(
             id=payload.get("sub"),

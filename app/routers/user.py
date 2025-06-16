@@ -8,6 +8,8 @@ import logging
 from fastapi.responses import HTMLResponse, JSONResponse
 from auth import check_authorization, get_token_with_credentials, get_refresh_token
 from settings import KEYCLOAK_CLIENT_ID, KEYCLOAK_INTERNAL_SERVER_URL, KEYCLOAK_REALM, KEYCLOAK_CLIENT_ID 
+import os
+from keycloak import KeycloakOpenID
 
 KEYCLOAK_INTROSPECT_URL = f"{KEYCLOAK_INTERNAL_SERVER_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/token/introspect"
 
@@ -32,7 +34,36 @@ def user_roles(user: Annotated[User, Depends(check_authorization)]):
 async def login(
     username: Annotated[str, Form()], 
     password: Annotated[str, Form()]
-    ):
+    ) -> str:
+
+    # Configure client
+    # For versions older than 18 /auth/ must be added at the end of the server_url.
+    keycloak_openid = KeycloakOpenID(server_url=os.getenv("KEYCLOAK_INTERNAL_SERVER_URL"),
+                                    client_id=os.getenv("KEYCLOAK_CLIENT_ID"),
+                                    realm_name=os.getenv("KEYCLOAK_REALM"),
+                                    verify=True)
+    
+    # Authenticate user
+    try:
+        token = keycloak_openid.token(username, password)
+        logger.info(f"User {username} authenticated successfully.")
+        logger.info(f"Access token: {token['access_token']}")
+        return JSONResponse (
+            content={
+                "access_token": token["access_token"],
+                "token_type": "bearer",
+                "refresh_token": token["refresh_token"],
+                "expires_in": token["expires_in"]
+            },
+            status_code=200
+        )
+    except Exception as e:
+        logger.error(f"Authentication failed for user {username}: {e}")
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+    
+    
+    
+    
     token = await get_token_with_credentials(username, password)
     return {
         "access_token": token["access_token"],
