@@ -1,10 +1,8 @@
 from fastapi import APIRouter, HTTPException, Depends, Body
 from fastapi.responses import JSONResponse, FileResponse
-from auth import get_auth_info, get_user_info
-from schemas import AIJob, User
-from db import engine, Episode, Annotation, Job, JobStatus, UserType
+from auth import check_authorization
+from db import engine, Episode, Annotation, Job, JobStatus, UserType, AIJob, User
 from typing import List, Dict, Optional, Annotated
-from schemas import AIJob, User
 from odmantic import ObjectId
 from datetime import datetime
 import httpx
@@ -27,10 +25,10 @@ ai_router = APIRouter(
 @ai_router.post("/{episode_id}/ai", status_code=202)
 async def send_job_to_ai(
     episode_id: str, 
-    user: Annotated[User, Depends(get_user_info)], 
+    auth: Annotated[User, Depends(check_authorization("ai-model"))], 
     ai_clients: List[str]
 ):
-    logger.info(f"Envoi de l'EGM aux modèles IA pour l'épisode {episode_id} par l'utilisateur {user.username}")
+    logger.info(f"Envoi de l'EGM aux modèles IA pour l'épisode {episode_id} par l'utilisateur {auth.username}")
     
     # Création d'un job pour chaque modèle
     jobs = []
@@ -85,9 +83,9 @@ async def send_job_to_ai(
 @ai_router.get("/{job_id}/egm")
 async def get_egm(
     job_id: str,
-    auth_info: dict = Depends(get_auth_info)
+    auth: dict = Depends(check_authorization("ai-model"))
 ) -> FileResponse:
-    logger.info(f"Requête reçue pour obtenir l'EGM avec job_id: {job_id} et auth_info: {auth_info}")
+    logger.info(f"Requête reçue pour obtenir l'EGM avec job_id: {job_id} et auth_info: {auth}")
     try:
         # Rechercher le job par son ID dans la collection "jobs"
         job = await engine.find_one(Job, Job.job_id == job_id)
@@ -129,7 +127,7 @@ async def get_egm(
 @ai_router.put("/{job_id}/annotation", status_code=200)
 async def add_ai_annotation_to_db(
     job_id: str,
-    auth_info: dict = Depends(get_auth_info),
+    auth: dict = Depends(check_authorization("ai-model")),
     ai_job: AIJob = Body(...)
 ) -> JSONResponse:
     # 1. Récupération du job
@@ -184,9 +182,9 @@ async def add_ai_annotation_to_db(
 @ai_router.get("/jobs")
 async def get_job_status(
     job_id: str,
-    user_info: User = Depends(get_user_info)
+    auth: User = Depends(check_authorization("read-data"))
 ) -> JSONResponse:
-    logger.info(f"Requête reçue pour obtenir le statut du job {job_id} par l'utilisateur {user_info.username}")
+    logger.info(f"Requête reçue pour obtenir le statut du job {job_id} par l'utilisateur {auth.username}")
     
     try:
         # Rechercher le job par son ID
@@ -227,9 +225,9 @@ async def get_job_status(
 @ai_router.get("/{job_id}/episode_type")
 async def get_episode_type(
     job_id: str,
-    auth_info: User = Depends(get_auth_info)
+    auth: User = Depends(check_authorization('ai-model'))
 ) -> JSONResponse:
-    logger.info(f"Requête reçue pour obtenir le type d'épisode pour le job {job_id} par l'utilisateur {auth_info}")
+    logger.info(f"Requête reçue pour obtenir le type d'épisode pour le job {job_id} par l'utilisateur {auth}")
     
     try:
         # Rechercher le job par son ID
@@ -255,15 +253,9 @@ async def get_episode_type(
 @ai_router.post("/model_registration")
 async def register_model(
     model_name: str,
-    user_info: User = Depends(get_user_info)
+    auth: User = Depends(check_authorization('create-client'))
 ) -> JSONResponse:
     try:
-        logger.info(f'client roles: {user_info.client_roles}')
-        
-        if 'create-client' not in user_info.client_roles:
-            logger.error(f"User {user_info.username} does not have permission to register models")
-            raise HTTPException(403, detail="You do not have permission to register models")
-    
         service = KeycloakService()
         r = await service.register_new_model(
             model_name=model_name,
@@ -287,10 +279,10 @@ async def register_model(
 @ai_router.get("/{client_id}/client_representation")
 async def get_client_representation( 
     client_id: str,
-    user_info: User = Depends(get_user_info)
+    auth: User = Depends(check_authorization('pastec-admin'))
 ) -> JSONResponse:
     try:
-        logger.info(f"Requête reçue pour obtenir la représentation du client par l'utilisateur {user_info.username}")
+        logger.info(f"Requête reçue pour obtenir la représentation du client par l'utilisateur {auth.username}")
         service = KeycloakService()
         client_representation = await service.get_client_rep(client_id)
         
@@ -308,10 +300,10 @@ async def get_client_representation(
 @ai_router.post('/key_pair')
 async def create_key_pair(
     client_id: str,
-    user_info: User = Depends(get_user_info)
+    auth: User = Depends(check_authorization('pastec-admin'))
 ) -> FileResponse:
     try:
-        logger.info(f"Requête reçue pour créer une paire de clés pour le client {client_id} par l'utilisateur {user_info.username}")
+        logger.info(f"Requête reçue pour créer une paire de clés pour le client {client_id} par l'utilisateur {auth.username}")
     
         private_key = await upload_key(client_id)
         

@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from typing import Annotated
-from db import Center, UserType, UserEntry
-from schemas import User, Token
+from db import Center, UserType, UserEntry, User, Token
 from fastapi import Form, Header
 from services.keycloak_service import KeycloakService, create_new_user
 import httpx

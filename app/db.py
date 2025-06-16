@@ -8,12 +8,13 @@ from odmantic import AIOEngine, Field, Model, EmbeddedModel, ObjectId
 from motor.motor_asyncio import AsyncIOMotorClient
 import asyncio
 from settings import MONGODB_URI, MONGODB_DB_NAME
-from typing import List, Optional, Dict
-from pydantic import BaseModel, computed_field
+from typing import List, Optional, Dict, Annotated
+from pydantic import BaseModel, BeforeValidator
 from enum import Enum
 from bson import Binary
 import datetime
 
+PyObjectId = Annotated[str, BeforeValidator(str)]
 client = AsyncIOMotorClient(MONGODB_URI)
 engine = AIOEngine(client, database=MONGODB_DB_NAME)
 
@@ -137,3 +138,43 @@ class ProcessingTimeForEpisode(Model):
     model_config = {
         "collection": "processing_times"
     }
+
+class TokenData(BaseModel):
+    username: Optional[str] = None
+    token: Optional[str] = None
+    role: str
+
+class Token(BaseModel):
+    token: str
+
+class User(BaseModel):
+    id: str
+    username: str
+    email: Optional[str]
+    first_name: Optional[str]
+    last_name: Optional[str]
+    realm_roles: list
+    client_roles: list
+    groups: list
+
+class AIModel(BaseModel):
+    client_id: str
+    ''' A compléter '''
+
+class AIJob(BaseModel):
+    job_id: str
+    id_model: str
+    annotation: str
+    confidence: Optional[float]
+    details: Optional[Dict]
+
+class EpisodeInfo(BaseModel):
+    id: str
+    patient_id: str
+    manufacturer: Manufacturer
+    episode_type: str
+    annotations: List[Annotation] = []
+    
+    @property
+    def labels(self) -> List[str]:
+        return [a.label for a in self.annotations]

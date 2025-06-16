@@ -8,8 +8,7 @@ from fastapi import FastAPI, Depends, Request
 from fastapi.security import OAuth2AuthorizationCodeBearer
 from fastapi.openapi.models import OAuthFlows as OAuthFlowsModel
 from fastapi.responses import JSONResponse
-from schemas import User
-from db import Episode
+from db import Episode, User
 from auth import check_authorization
 from typing import Annotated
 from routers.episode import episode_router, egm_router, annotation_router
@@ -109,6 +108,10 @@ async def read_root_head():
 @app.get("/")
 async def root():
     return {"message": "Hello World"}
+
+@app.get("/public")
+async def public_endpoint():
+    return {"message": "This is a public endpoint, accessible without authentication."}
 
 # Example secure route
 @app.get("/secure")

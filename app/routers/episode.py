@@ -1,15 +1,8 @@
-"""
-Episodes router
-Contains most of the important routes of the application
-
-JD 31/10/24
-"""
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, Body, Form, File, Query
 from fastapi.responses import JSONResponse, FileResponse
 from auth import get_user_info, get_auth_info, check_authorization
 import httpx
-from schemas import User, AIJob, EpisodeInfo  # Importer EpisodeInfo depuis schemas
-from db import engine, Episode, Annotation, Job, JobStatus, Manufacturer, UserType, ProcessingTimeForEpisode
+from db import engine, Episode, Annotation, Job, JobStatus, Manufacturer, UserType, ProcessingTimeForEpisode, User, AIJob, EpisodeInfo
 from typing import List, Annotated, Dict, Optional
 from odmantic import ObjectId
 from services.diagnosis_service import DiagnosisService
@@ -402,7 +395,7 @@ async def update_diagnosis(
 @episode_router.get("/diagnoses_labels/{manufacturer}")
 async def get_diagnoses(
     manufacturer: str,
-    auth_info: dict = Depends(get_auth_info)
+    auth_info: Annotated[User, Depends(check_authorization("read-data"))]  # Assurez-vous que l'utilisateur a le droit de lire les données
 ) -> JSONResponse:
     """
     Récupère les diagnostics disponibles pour un fabricant et tous les épisodes possibles - permet d'améliorer la réactivité du plugin vs. une requête par épisode pour certains cas d'usage
@@ -430,17 +423,18 @@ async def get_diagnoses(
 
 @episode_router.post("/processing_time")
 async def post_processing_time(
+    auth: Annotated[User, Depends(check_authorization("update-episode"))],
     processing_time: str = Form(...),
     episode_id: str = Form(...),
-    auth_info: dict = Depends(get_auth_info)
+
 ) -> JSONResponse:
     """
     Stocke le temps de traitement pour un épisode spécifique
     """
     
-    user: User = auth_info.get("info")
+    user: User = auth.get("info")
     
-    logger.info(f"total auth_info: {auth_info}")
+    logger.info(f"total auth: {auth}")
     
     if not user:
         logger.error("Aucune information utilisateur trouvée.")

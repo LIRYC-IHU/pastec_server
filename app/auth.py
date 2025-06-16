@@ -3,7 +3,7 @@ from keycloak import KeycloakOpenID
 from typing import Union
 from settings import *
 from fastapi import Security, HTTPException, status, Depends
-from schemas import User, AIModel
+from db import User, AIModel
 from jwt import decode, encode, InvalidTokenError, ExpiredSignatureError, get_unverified_header
 from functools import lru_cache
 import logging
@@ -85,9 +85,6 @@ async def check_center_affiliation(token: str, center_name: str):
             headers={"WWW-Authenticate": "Bearer"},
         )
         
-        
-
-
 # Get Payload from Token
 async def get_payload(token: str = Security(oauth2_scheme)):
     audience = f"{KEYCLOAK_SERVER_URL}/realms/{KEYCLOAK_REALM}"
@@ -118,9 +115,6 @@ async def get_user_info(payload: dict = Depends(get_payload)) -> User:
     except Exception as e:
         logger.error(f"Error extracting user info: {str(e)}")
         raise HTTPException(status_code=400, detail="Invalid token payload")
-    
-
-
 
 # Role Check Dependency
 def check_role(role: str):
