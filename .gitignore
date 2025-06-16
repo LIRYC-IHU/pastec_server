@@ -12,6 +12,7 @@ app/settings.py
 .DS_Store
 .venv/ 
 *.h5
+ai_worker/ai_models/
 ec2-user@51.20.129.165
 data/
 docker/
