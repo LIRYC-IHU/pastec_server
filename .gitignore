@@ -16,4 +16,4 @@ data/
 docker/
 keycloak-import/
 .env
-.env-dev
+.env-devdocker/postgres/pg_stat_tmp/
