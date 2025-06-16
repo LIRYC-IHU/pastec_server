@@ -9,6 +9,7 @@
 *.yml
 docker-compose-dev.yml
 app/settings.py
+app/**/*.json
 *.json
 .DS_Store
 .venv/ 
