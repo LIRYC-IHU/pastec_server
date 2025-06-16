@@ -21,3 +21,5 @@ docker/
 keycloak-import/
 .env
 .env-devdocker/postgres/pg_stat_tmp/
+db_dump**
+**.dump
