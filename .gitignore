@@ -5,9 +5,15 @@
 *.pyo
 *.pyd
 *.pem
+*.pem.pub
+*.yml
+*.json
 .DS_Store
 .venv/ 
 *.h5
 ec2-user@51.20.129.165
 data/
 docker/
+keycloak-import/
+.env
+.env-dev
