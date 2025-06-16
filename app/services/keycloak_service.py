@@ -2,6 +2,7 @@
 Service for Keycloak interactions
 
 BS 2024
+
 """
 
 import httpx
@@ -182,7 +183,76 @@ async def create_new_user(user: UserEntry) -> JSONResponse:
     except Exception as e:
         logger.error(f"Failed to create user {user.username}: {str(e)}")
         return JSONResponse(status_code=500, content={"error": str(e)})
+    
+async def register_new_model(roles: List[str], model_name: str, description: str = 'no description available') -> JSONResponse:
+        """Enregistrer un nouveau modèle dans Keycloak"""
+        try:
+            kc = get_keycloak_admin()
+            
+            payload = {
+                "name": model_name,
+                "description": description,
+                "clientId": model_name,
+                "clientAuthenticatorType": "client-jwt",
+                "enabled": True,
+                "protocol": "openid-connect",
+                "serviceAccountsEnabled": True,
+                "publicClient": False,
+                "consentRequired": False,
+                "standardFlowEnabled": False,
+                "implicitFlowEnabled": False,
+                "directAccessGrantsEnabled": False,
+            }
+            
+            logger.info(f"Registering new model with payload: {payload}")
+            client_uuid = kc.create_client(payload)
+            logger.info(f"Model {model_name} registered successfully: {client_uuid}")
+            logger.info("trying to add roles to service account")
+            response = assign_roles_to_service_account(kc, client_uuid, roles )
+            return JSONResponse(status_code=201, content={"message": "Model registered successfully", "client_id": client_uuid})
+        except HTTPException as e:
+            logger.error(f"Failed to get admin token: {str(e)}")
+            return JSONResponse(status_code=500, content={"error": "Failed to get admin token"})
+        
+def get_client_rep(client_id: str) -> dict:
+    """Obtenir la représentation d'un client"""
+    try:
+        kc = get_keycloak_admin()
+        client_uuid = kc.get_client_id(client_id)
+        
+        if not client_uuid:
+            logger.error(f"Client {client_id} not found")
+            raise HTTPException(status_code=404, detail="Client not found")
+        logger.info(f"realm roles for client {client_id}: {realm_roles}")
+        
+        return kc.get_client(client_uuid)
 
+    except Exception as e:
+        logger.error(f"Error getting client representation: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: Failed to get client representation, {str(e)}")
+
+def assign_roles_to_service_account(kc: KeycloakAdmin, client_uuid: str, roles: List[str]) -> JSONResponse:  
+
+    sa_user = kc.get_client_service_account_user(client_uuid)
+    user_id = sa_user.get("id")
+    if not user_id:
+        raise HTTPException(status_code=404, detail="Service-account non trouvé")
+
+    # 3) Récupérer tous les realm-roles existants
+    existing_roles = {r["name"] for r in kc.get_realm_roles()}
+    missing_roles = set(roles) - existing_roles
+    logger.info(f"Existing realm roles: {existing_roles}")
+    logger.info(f"{len(missing_roles)} roles are missing: {missing_roles}")
+
+    # 5) Assigner chaque rôle existant
+    for role_name in existing_roles:
+        realm_role = kc.get_realm_role(role_name)
+        kc.assign_realm_roles(user_id, [realm_role])
+
+    logger.info(f"Assigned realm roles {existing_roles} to service-account '{client_uuid}'")
+
+
+    
 
 class KeycloakService:
     def __init__(self):
