@@ -1,12 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException
 from typing import Annotated
+from db import Center, UserType, UserEntry
 from schemas import User, Token
 from fastapi import Form, Header
-from services.keycloak_service import KeycloakService
+from services.keycloak_service import KeycloakService, create_new_user
 import httpx
 import logging
-from fastapi.responses import HTMLResponse
-from auth import get_user_info, get_token_with_credentials, get_refresh_token
+from fastapi.responses import HTMLResponse, JSONResponse
+from auth import check_authorization, get_token_with_credentials, get_refresh_token
 from settings import KEYCLOAK_CLIENT_ID, KEYCLOAK_INTERNAL_SERVER_URL, KEYCLOAK_REALM, KEYCLOAK_CLIENT_ID 
 
 KEYCLOAK_INTROSPECT_URL = f"{KEYCLOAK_INTERNAL_SERVER_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/token/introspect"
@@ -23,7 +24,7 @@ user_router = APIRouter(
 )
 
 @user_router.get("/roles")
-def user_roles(user: Annotated[User, Depends(get_user_info)]):
+def user_roles(user: Annotated[User, Depends(check_authorization)]):
     return {'realm_roles': user.realm_roles,
             'client_roles': user.client_roles}
     
@@ -190,7 +191,7 @@ async def privacy_policy() -> HTMLResponse:
 
 @user_router.get('/callback', response_class = HTMLResponse)
 async def callback() -> HTMLResponse:
-    return """
+        return """
     <html>
     <head>
     <meta charset="utf-8">
@@ -217,3 +218,28 @@ async def callback() -> HTMLResponse:
     <p>Vous pouvez maintenant fermer cette fenêtre et retourner à l'application.</p>
     </body>
     </html>"""
+    
+@user_router.post('/new-user')
+async def create_user(
+    username: Annotated[str, Form()],
+    password: Annotated[str, Form()],
+    email: Annotated[str, Form()],
+    first_name: Annotated[str, Form()],
+    last_name: Annotated[str, Form()],
+    center: Annotated[Center, Form()],
+    user_type: Annotated[UserType, Form()],
+    rights: User = Depends(check_authorization("pastec-admin"))
+) -> JSONResponse:
+    
+    user_entry = UserEntry(
+        username=username,
+        password=password,
+        first_name=first_name,
+        last_name=last_name,
+        email=email,
+        center=center,
+        user_type=user_type
+    )
+    response = await create_new_user(user_entry)
+    
+    return response

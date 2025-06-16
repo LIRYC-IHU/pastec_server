@@ -4,12 +4,13 @@ Main app file
 JD 31/10/24
 
 """
-from fastapi import FastAPI,Depends
+from fastapi import FastAPI, Depends, Request
 from fastapi.security import OAuth2AuthorizationCodeBearer
 from fastapi.openapi.models import OAuthFlows as OAuthFlowsModel
+from fastapi.responses import JSONResponse
 from schemas import User
 from db import Episode
-from auth import get_user_info
+from auth import check_authorization
 from typing import Annotated
 from routers.episode import episode_router, egm_router, annotation_router
 from routers.ai import ai_router 
@@ -92,8 +93,6 @@ app.add_middleware(
     max_age=3600# Expose le header Content-Disposition
 )
 
-
-
 # Routers for users & episode management
 app.include_router(user_router)
 app.include_router(episode_router)
@@ -113,8 +112,12 @@ async def root():
 
 # Example secure route
 @app.get("/secure")
-async def root(user: Annotated[User, Depends(get_user_info)]):
-    return user.model_dump()
+async def root(user: Annotated[User, Depends(check_authorization("pastec-admin"))]):
+    return {
+        "message": "This is a secure endpoint",
+        "user": user.username,
+        "roles": user.realm_roles + user.client_roles
+    }
 
 # Initialisation de la base de données
 async def init_diagnoses(engine: AsyncIOMotorClient):

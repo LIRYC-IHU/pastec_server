@@ -6,7 +6,7 @@ JD 31/10/24
 """
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, Body, Form, File, Query
 from fastapi.responses import JSONResponse, FileResponse
-from auth import get_user_info, get_auth_info, check_role, get_ai_model_info
+from auth import get_user_info, get_auth_info, check_authorization
 import httpx
 from schemas import User, AIJob, EpisodeInfo  # Importer EpisodeInfo depuis schemas
 from db import engine, Episode, Annotation, Job, JobStatus, Manufacturer, UserType, ProcessingTimeForEpisode
@@ -50,13 +50,14 @@ annotation_router = APIRouter(
 
 @episode_router.get("/search")
 async def search(
+    rights: Annotated[User, Depends(check_authorization("read-data"))],
     episode_id: Optional[str] = Query(None),
     episode_type: Optional[str] = Query(None),
     manufacturer: Optional[str] = Query(None),
     user: Optional[str] = Query(None),
     label: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
-    limit: int = Query(20, ge=1, le=100),
+    limit: int = Query(20, ge=1, le=10000),
     sort_by: str = Query("patient_id"),
     sort_order: str = Query("asc")
 ) -> JSONResponse:
@@ -190,9 +191,11 @@ async def send_to_ai(manufacturer: str, episode_type: str, episode_id: str, jobs
                     logger.error(f"Erreur lors de l'envoi à l'IA {ai_client}: {response.text}")
     return ai_clients, ai_available
 
+
+
 @episode_router.post("/upload_episode")
 async def upload_episode(
-    auth_info: dict = Depends(get_auth_info),
+    rights= Annotated[User, Depends(check_authorization("create-episode"))],
     patient_id: str = Form(...),
     manufacturer: str = Form(...),
     episode_type: str = Form(...),
@@ -273,7 +276,10 @@ async def upload_episode(
         raise HTTPException(status_code=422, detail=str(e))
 
 @episode_router.get("/{episode_id}/diagnostics")
-async def get_episode_diagnostics(episode_id: str) -> JSONResponse:
+async def get_episode_diagnostics(
+    rights: Annotated[User, Depends(check_authorization("read-data"))],
+    episode_id: str
+    ) -> JSONResponse:
     """
     Récupère les diagnostics disponibles pour un épisode spécifique. Utilisé dans la web app
     """
@@ -308,8 +314,11 @@ async def get_episode_diagnostics(episode_id: str) -> JSONResponse:
     
 
 @episode_router.get("/{id}")
-async def get_episode_by_id(id: ObjectId, auth_info: dict = Depends(get_auth_info)) -> EpisodeInfo:
-    logger.info(f"Requête reçue pour obtenir l'épisode avec id: {id} et auth_info: {auth_info}")
+async def get_episode_by_id(
+    rights: Annotated[User, Depends(check_authorization("read-data"))],
+    id: ObjectId
+    ) -> EpisodeInfo:
+    logger.info(f"Requête reçue pour obtenir l'épisode avec id: {id} et auth_info: {rights}")
     """ 
     Get info about a given episode from its `id`
     """
@@ -320,7 +329,10 @@ async def get_episode_by_id(id: ObjectId, auth_info: dict = Depends(get_auth_inf
 
 
 @episode_router.delete("/{id}")
-async def delete_episode_by_id(id: ObjectId, auth_info: dict = Depends(get_auth_info)) -> EpisodeInfo:
+async def delete_episode_by_id(
+    auth_info : Annotated[User, Depends(check_authorization("delete-episode"))],
+    id: ObjectId
+    ) -> EpisodeInfo:
     logger.info(f"Requête reçue pour supprimer l'épisode avec id: {id} et auth_info: {auth_info}")
     episode = await engine.find_one(Episode, Episode.id == id)
     if episode is None:
@@ -330,7 +342,7 @@ async def delete_episode_by_id(id: ObjectId, auth_info: dict = Depends(get_auth_
 
 @episode_router.put("/diagnoses")
 async def update_diagnosis(
-    auth_info: dict = Depends(get_auth_info),  
+    auth_info: Annotated[User, Depends(check_authorization("update-labels"))], 
     diagnosis: str = Form(...),
     manufacturer: str = Form(...),
     labels: str = Form(...)

@@ -30,6 +30,30 @@ class Manufacturer(str, Enum):
     MEDTRONIC = "medtronic"
     MICROPORT = "microport"
     
+class Center(str, Enum):
+    BORDEAUX = "bordeaux",
+    PARIS = "paris",
+    LYON = "lyon",
+    MARSEILLE = "marseille",
+    TOULOUSE = "toulouse",
+    NANTES = "nantes",
+    STRASBOURG = "strasbourg",
+    LILLE = "lille",
+    NICE = "nice",
+    RENNES = "rennes",
+    GRENOBLE = "grenoble",
+    MONTPELLIER = "montpellier",
+    TOURS = "tours",
+    
+class UserEntry(BaseModel):
+    username: str = Field(..., description="Username of the user")
+    password: str = Field(..., description="Password of the user")
+    first_name: str = Field(..., description="First name of the user")
+    last_name: str = Field(..., description="Last name of the user")
+    email: str = Field(..., description="Email of the user")
+    center: Center = Field(..., description="Center where the user is located")
+    user_type: UserType = Field(..., description="Type of user (expert, md, nurse, ai)")
+
     
 class Annotation(EmbeddedModel):
     user: str

@@ -18,6 +18,7 @@ from cryptography import x509
 from cryptography.x509.oid import NameOID
 from cryptography.hazmat.primitives import hashes
 import datetime
+from db import UserEntry
 
 # Configuration détaillée du logging
 logging.basicConfig(level=logging.DEBUG)
@@ -129,7 +130,58 @@ def generate_keys():
     
     return private_key, public_key
     
+async def create_new_user(user: UserEntry) -> JSONResponse:
+    """
+    Crée un nouvel utilisateur dans Keycloak.
     
+    Args:
+        user (UserEntry): L'utilisateur à créer.
+        
+    Returns:
+        JSONResponse: La réponse de l'API Keycloak.
+    """
+    kc = get_keycloak_admin()
+    
+    try:
+        
+        logger.info('user center: %s', user.center.value)
+        logger.info('user user_type: %s', user.user_type.value)
+        
+        user_id = kc.create_user({
+            "email": user.email,
+            "username": user.username,
+            "enabled": True,
+            "firstName": user.first_name,
+            "lastName": user.last_name,
+            "credentials": [{"value": user.password,"type": "password"}],
+            }
+        )
+
+        logger.info(f"User {user.username} created successfully")
+        
+        logger.info(f"User ID: {user_id}")
+        
+        
+        groups = kc.get_groups()  # liste de dicts { "id", "name", "path", ... }
+        group = next(g for g in groups if g["name"] == user.center.value)
+        kc.group_user_add(user_id, group["id"])
+        logger.info(f"Added user {user.username} to group {group['name']}")
+        
+        client_uuid = kc.get_client_id(os.getenv("KEYCLOAK_CLIENT_ID"))  
+        role_def    = kc.get_client_role(client_uuid, user.user_type.value)
+        kc.assign_client_role(
+            user_id,                # l’utilisateur
+            client_uuid,            # le client (ex: "pastec-server")
+            [role_def]              # liste des rôles à ajouter
+        )
+        logger.info(f"Assigned client-role {role_def['name']} to user {user.username}")
+        
+        
+        return JSONResponse(status_code=201, content={"message": f"User {user.username} created successfully"})
+        
+    except Exception as e:
+        logger.error(f"Failed to create user {user.username}: {str(e)}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 
 class KeycloakService:
