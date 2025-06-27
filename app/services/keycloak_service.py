@@ -25,7 +25,7 @@ from db import UserEntry
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-def get_keycloak_admin() -> KeycloakAdmin:
+def get_keycloak_admin(client = os.getenv("KEYCLOAK_ADMIN_CLIENT_ID", "admin-cli")) -> KeycloakAdmin:
     """
     Crée et retourne un client KeycloakAdmin configuré
     à partir des variables d'environnement.
@@ -36,7 +36,7 @@ def get_keycloak_admin() -> KeycloakAdmin:
         username=os.getenv("KEYCLOAK_PASTEC_ADMIN"),
         password=os.getenv("KEYCLOAK_PASTEC_ADMIN_PASSWORD"),
         realm_name=os.getenv("KEYCLOAK_REALM"),
-        client_id=os.getenv("KEYCLOAK_ADMIN_CLIENT_ID", "admin-cli"),
+        client_id=client,
         # pas de client_secret_key pour garder le mode public
         verify=True,
     )
@@ -298,6 +298,34 @@ def get_clients_with_realm_role(role_name: str) -> List[Dict[str, str]]:
     logger.info(f"Clients: {matching_clients}")
     return matching_clients
     
+def reset_password(new_password: str, username: str, email: str) -> JSONResponse:
+    """
+    Réinitialise le mot de passe d'un utilisateur dans Keycloak.
+    
+    Args:
+        password (str): Le nouveau mot de passe.
+        username (str): Le nom d'utilisateur de l'utilisateur dont le mot de passe doit être réinitialisé.
+        
+    Returns:
+        JSONResponse: La réponse de l'API Keycloak.
+    """
+    kc = get_keycloak_admin(client="pastec_server")
+    
+    try:
+        
+        logger.info(f"Resetting password for user {username} with email {email}")
+        users = kc.get_users({})
+        logger.info(f"Found {len(users)} users in Keycloak")
+        logger.info(f"Users: {users}")
+        user_id = kc.get_user_id(username)
+        kc.set_user_password(user_id, new_password, temporary=False)
+        logger.info(f"Password for user {username} reset successfully")
+        
+        return JSONResponse(status_code=200, content={"message": f"Password for user {username} reset successfully"})
+        
+    except Exception as e:
+        logger.error(f"Failed to reset password for user {username}: {str(e)}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 class KeycloakService:
     def __init__(self):
@@ -527,4 +555,3 @@ class KeycloakService:
             logger.error(f"Error getting client representation: {str(e)}", exc_info=True)
             return None
         
-    

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from typing import Annotated
 from db import Center, UserType, UserEntry, User, Token
 from fastapi import Form, Header
-from services.keycloak_service import KeycloakService, create_new_user
+from services.keycloak_service import KeycloakService, create_new_user, reset_password
 import httpx
 import logging
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -273,3 +273,15 @@ async def create_user(
     response = await create_new_user(user_entry)
     
     return response
+
+@user_router.post('/reset-password')
+def reset_pwd(
+    username: Annotated[str, Form()],
+    email: Annotated[str, Form()],
+    new_password: Annotated[str, Form()]
+) -> JSONResponse:
+    return reset_password(
+        username=username,
+        email=email,
+        new_password=new_password
+    )
