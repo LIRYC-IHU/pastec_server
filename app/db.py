@@ -22,7 +22,7 @@ class UserType(str, Enum):
     EXPERT = "expert"
     MD = "md"
     ARC = "nurse"
-    AI = "ai"
+
 
 class Manufacturer(str, Enum):
     ABBOTT = "abbott"
@@ -54,7 +54,6 @@ class UserEntry(BaseModel):
     email: str = Field(..., description="Email of the user")
     center: Center = Field(..., description="Center where the user is located")
     user_type: UserType = Field(..., description="Type of user (expert, md, nurse, ai)")
-
     
 class Annotation(EmbeddedModel):
     user: str
@@ -134,6 +133,7 @@ class ProcessingTimeForEpisode(Model):
     user: str
     user_type: UserType
     processing_time: float
+    annotation: str
     
     model_config = {
         "collection": "processing_times"

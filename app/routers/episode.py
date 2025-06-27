@@ -412,6 +412,7 @@ async def get_diagnoses(
 @episode_router.post("/processing_time")
 async def post_processing_time(
     auth: Annotated[User, Depends(check_authorization("annotate-episode"))],
+    annotation: str = Form(...),
     processing_time: str = Form(...),
     episode_id: str = Form(...),
 
@@ -419,17 +420,18 @@ async def post_processing_time(
     """
     Stocke le temps de traitement pour un épisode spécifique
     """
-    
-    user: User = auth.get("info")
-    
     logger.info(f"total auth: {auth}")
     
-    if not user:
-        logger.error("Aucune information utilisateur trouvée.")
-        raise HTTPException(403, "User information is missing")
+    username = auth.username
     
-    username = user.username
-    user_type = user.groups[0][1:]
+    if "nurse" in auth.client_roles:
+        user_type = "nurse"
+    elif "doctor" in auth.client_roles:
+        user_type = "doctor"
+    elif "expert" in auth.client_roles:
+        user_type = "expert"
+    elif "ai-model" in auth.client_roles:
+        user_type = "ai-model"
     
     try:
         processing_time = float(processing_time)
@@ -440,12 +442,17 @@ async def post_processing_time(
     logger.debug(f"Requête reçue pour stocker le temps de traitement pour l'épisode {episode_id}")
     logger.debug(f"Temps de traitement reçu: {processing_time}")
     
+    
+    
     processing_time = ProcessingTimeForEpisode(
         episode_id=episode_id,
         processing_time=processing_time,
+        annotation=annotation,
         user = username,
         user_type=UserType(user_type),
     )
+    
+    logger.info(f"processing_time: {processing_time}")
     
     await engine.save(processing_time)
     
