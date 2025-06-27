@@ -424,14 +424,7 @@ async def post_processing_time(
     
     username = auth.username
     
-    if "nurse" in auth.client_roles:
-        user_type = "nurse"
-    elif "doctor" in auth.client_roles:
-        user_type = "doctor"
-    elif "expert" in auth.client_roles:
-        user_type = "expert"
-    elif "ai-model" in auth.client_roles:
-        user_type = "ai-model"
+    user_type = auth.groups[0] if auth.groups else "unknown"
     
     try:
         processing_time = float(processing_time)
@@ -593,7 +586,7 @@ async def put_episode_annotation(
     label: str = Body(..., embed=True),
     details: Optional[Dict] = Body(None)
 ) -> JSONResponse:
-    logger.info(f"Tentative d'ajout d'annotation pour l'épisode {episode_id} par {auth_info['type']}: {auth_info['info']}")
+    logger.info(f"Tentative d'ajout d'annotation pour l'épisode {episode_id} par {auth_info.username}")
     """Ajoute une annotation à un épisode"""
     logger.info(f"Tentative d'ajout d'annotation pour l'épisode {episode_id}")
     logger.info(f"Label reçu: {label}")
@@ -605,30 +598,16 @@ async def put_episode_annotation(
         if not episode:
             logger.error(f"Episode {episode_id} non trouvé")
             raise HTTPException(404, detail='No episode with this ID.')
-        
 
-        
-        # Créer la nouvelle annotation avec le bon type d'utilisateur
-        if auth_info['type'] == 'user':
-            user = auth_info['info']
-            logger.info("user group: ", user.groups[0][1:] )
-            group = user.groups[0][1:]
-            new_annotation = Annotation(
-                user=user.username,
-                user_type=UserType(group),  # ou choisir le type approprié selon votre logique
-                label=label,
-                details=details  # Champ optionnel
-            )
-        else:
-            ai_model = auth_info['info']
-            new_annotation = Annotation(
-                user=ai_model.client_id,
-                user_type=UserType.AI,
-                label=label,
-                details=details
-            )
-        
-        
+        logger.info("user group: ", auth_info.groups )
+        group = auth_info.groups[0]
+        new_annotation = Annotation(
+            user=auth_info.username,
+            user_type=UserType(group),  
+            label=label,
+            details=details 
+        )
+
         # Ajouter l'annotation à la liste des annotations de l'épisode
         episode.annotations.append(new_annotation)
         await engine.save(episode)

@@ -100,11 +100,10 @@ async def get_user_info(payload: dict = Depends(get_payload)) -> User:
         logger.info(f"Realm Roles: {realm_roles}")
         logger.info(f"Resource Access: {resource_access}")
         ## add realm_access + resource_access
-        
-        
-        
-
-        groups_claim = payload.get("group-membership") or []
+        groups_claim = payload.get("groups")or []
+        groups_claim = [group.strip('/') for group in groups_claim]
+    
+        logger.info(f"Groups Claim: {groups_claim}")
         return User(
             id=payload.get("sub"),
             username=payload.get("preferred_username"),

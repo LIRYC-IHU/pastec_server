@@ -8,6 +8,9 @@ from fastapi import FastAPI, Depends, Request
 from fastapi.security import OAuth2AuthorizationCodeBearer
 from fastapi.openapi.models import OAuthFlows as OAuthFlowsModel
 from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
+
 from db import Episode, User
 from auth import check_authorization
 from typing import Annotated
@@ -16,7 +19,6 @@ from routers.ai import ai_router
 from routers.user import user_router
 from contextlib import asynccontextmanager
 from services.keycloak_service import KeycloakService
-from fastapi.middleware.cors import CORSMiddleware
 import json
 import os
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -68,6 +70,7 @@ app = FastAPI(
     title='PASTEC Server',
     description='Pastec - server backend. This server collects and stores EGMs and annotations.',
     version='0.1',
+    debug=True,
     swagger_ui_init_oauth={
         'usePkceWithAuthorizationCodeGrant': True,
         'clientId': "pastec_server"
@@ -98,6 +101,13 @@ app.include_router(episode_router)
 app.include_router(egm_router)
 app.include_router(annotation_router)
 app.include_router(ai_router)  # Inclure le routeur IA
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    return JSONResponse(
+        status_code=422,
+        content={"detail": exc.errors(), "body": exc.body}
+    )
 
 # Example public route
 

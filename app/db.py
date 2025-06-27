@@ -22,7 +22,7 @@ class UserType(str, Enum):
     EXPERT = "expert"
     MD = "md"
     ARC = "nurse"
-
+    AI_MODEL = "ai"
 
 class Manufacturer(str, Enum):
     ABBOTT = "abbott"
@@ -89,7 +89,7 @@ class Episode(Model):
     episode_type: str = Field(...)
     age_at_episode: int
     episode_duration: str = Field(...)
-    implant_model: str = Field(...)
+    implant_model: Optional[str] = Field(...)
     egm: Optional[Binary] = None
     annotations: List[Annotation] = []
     
