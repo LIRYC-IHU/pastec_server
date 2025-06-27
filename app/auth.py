@@ -96,7 +96,14 @@ async def get_user_info(payload: dict = Depends(get_payload)) -> User:
         realm_access = payload.get("realm_access") or {}
         resource_access = payload.get("resource_access")
         realm_roles = realm_access.get("roles", [])
-        client_roles = resource_access + realm_roles
+        
+        logger.info(f"Realm Roles: {realm_roles}")
+        logger.info(f"Resource Access: {resource_access}")
+        ## add realm_access + resource_access
+        
+        
+        
+
         groups_claim = payload.get("group-membership") or []
         return User(
             id=payload.get("sub"),
@@ -105,7 +112,7 @@ async def get_user_info(payload: dict = Depends(get_payload)) -> User:
             first_name=payload.get("given_name"),
             last_name=payload.get("family_name"),
             realm_roles=realm_roles,
-            client_roles=client_roles,
+            client_roles=resource_access['pastec_server']['roles'],
             groups=groups_claim 
         )
     except Exception as e:
@@ -125,9 +132,22 @@ def check_role(role: str):
 # Get Application Info
 async def get_ai_model_info(payload: dict = Depends(get_payload)) -> AIModel:
     try:
-        return AIModel(
-            client_id=payload.get("sub", "")
+        
+        logger.info("AI Model Authentication")
+        logger.info(f"Payload: {payload}")
+        
+        model = AIModel(
+            client_id=payload.get("sub"),
+            model_name=payload.get("client_id"),
+            client_roles=payload.get("resource_access", {}).get("pastec_server", {}).get("roles", []),
+            realm_roles=payload.get("realm_access", []).get("roles", [])
         )
+        
+        logger.info(f"AI Model Info: {model}")
+        
+        
+        return model
+    
     except Exception as e:
         logger.error(f"Error extracting AI model info: {str(e)}")
         raise HTTPException(status_code=400, detail="Invalid token payload")

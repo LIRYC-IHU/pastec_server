@@ -158,7 +158,11 @@ class User(BaseModel):
     groups: list
 
 class AIModel(BaseModel):
-    client_id: str
+    client_id: str= Field(..., description="Client ID of the AI model")
+    model_name: str= Field(..., description="Name of the AI model")
+    client_roles: List[str] = Field(..., description="Client Roles associated with the AI model")
+    realm_roles: List[str] = Field(..., description="Service Account Roles associated with the AI model")
+    
     ''' A compléter '''
 
 class AIJob(BaseModel):
