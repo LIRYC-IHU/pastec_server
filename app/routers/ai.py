@@ -140,7 +140,7 @@ async def add_ai_annotation_to_db(
     # 2. Création de la nouvelle annotation
     new_annotation = Annotation(
         user=ai_job.id_model,  # Assurez-vous que id_model est correct
-        user_type=UserType.AI,
+        user_type=UserType.AI_MODEL,
         label=ai_job.annotation,
         details=ai_job.details
     )

@@ -495,13 +495,23 @@ async def get_episode_egm(
         
         # Créer un fichier temporaire pour stocker l'EGM
         temp_file = f"/tmp/{episode_id}.svg"
+        import base64
+
+        # Récupération des données brutes
+        data = episode.egm if isinstance(episode.egm, (bytes, bytearray, Binary)) else episode.egm.encode()
+
+        # Détection : si c'est du XML (<svg), on écrit directement, sinon on essaie une décodage base64
+        if data.lstrip().startswith(b'<'):
+            svg_bytes = data
+        else:
+            try:
+                svg_bytes = base64.b64decode(data)
+            except Exception:
+                svg_bytes = data
+
+        # Écriture dans le fichier temporaire
         with open(temp_file, "wb") as f:
-            if isinstance(episode.egm, Binary):
-                f.write(episode.egm)
-            else:
-                # Si l'EGM est stocké en base64
-                import base64
-                f.write(base64.b64decode(episode.egm))
+            f.write(svg_bytes)
         
         # Retourner le fichier
         return FileResponse(

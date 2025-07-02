@@ -309,7 +309,7 @@ def reset_password(new_password: str, username: str, email: str) -> JSONResponse
     Returns:
         JSONResponse: La réponse de l'API Keycloak.
     """
-    kc = get_keycloak_admin(client="pastec_server")
+    kc = get_keycloak_admin()
     
     try:
         
@@ -318,8 +318,15 @@ def reset_password(new_password: str, username: str, email: str) -> JSONResponse
         logger.info(f"Found {len(users)} users in Keycloak")
         logger.info(f"Users: {users}")
         user_id = kc.get_user_id(username)
+        credentials = kc.get_user(user_id)
+        logger.info(f"Credentials for user {username}: {credentials}")
         kc.set_user_password(user_id, new_password, temporary=False)
+        if credentials['email'] != email:
+            logger.warning(f"Email mismatch for user {username}: expected {email}, found {credentials['email']}")
+            return JSONResponse(status_code=400, content={"error": "Email error, unable to reset password"})
         logger.info(f"Password for user {username} reset successfully")
+        
+        
         
         return JSONResponse(status_code=200, content={"message": f"Password for user {username} reset successfully"})
         
