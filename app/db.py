@@ -8,15 +8,18 @@ from odmantic import AIOEngine, Field, Model, EmbeddedModel, ObjectId
 from motor.motor_asyncio import AsyncIOMotorClient
 import asyncio
 from settings import MONGODB_URI, MONGODB_DB_NAME
-from typing import List, Optional, Dict, Annotated
-from pydantic import BaseModel, BeforeValidator
+from typing import List, Optional, Dict, Annotated, Union
+from pydantic import BaseModel, BeforeValidator, field_validator
 from enum import Enum
 from bson import Binary
 import datetime
+import base64
 
 PyObjectId = Annotated[str, BeforeValidator(str)]
 client = AsyncIOMotorClient(MONGODB_URI)
 engine = AIOEngine(client, database=MONGODB_DB_NAME)
+
+## VALIDATORS
 
 class UserType(str, Enum):
     EXPERT = "expert"
@@ -83,6 +86,7 @@ class Job(Model):
     }
 
 class Episode(Model):
+    
     episode_id: str = Field(...)
     patient_id: str = Field(...)
     manufacturer: Manufacturer
@@ -90,12 +94,68 @@ class Episode(Model):
     age_at_episode: int
     episode_duration: str = Field(...)
     implant_model: Optional[str] = Field(...)
-    egm: Optional[Binary] = None
+    egm: Optional[Union[Binary, List[Binary], str]] = None
     annotations: List[Annotation] = []
+    
+    created_at: Optional[datetime.datetime] = Field(default_factory=datetime.datetime.now)
+    updated_at: Optional[datetime.datetime] = Field(default_factory=datetime.datetime.now)
     
     model_config = {
         "collection": "episodes"
     }
+    
+    @field_validator("egm", mode="before")
+    @classmethod
+    def normalize_egm(cls, v):
+        """
+        If egm comes in as a str, assume it's base64 data and decode it
+        into a MongoDB Binary. If it's a list, process each item. Otherwise leave it as-is.
+        """
+        if v is None:
+            return None
+
+        # if it's already a Binary, great
+        if isinstance(v, Binary):
+            return v
+            
+        # if it's a list of Binaries or other items, process each
+        if isinstance(v, list):
+            processed_list = []
+            for item in v:
+                if isinstance(item, Binary):
+                    processed_list.append(item)
+                elif isinstance(item, (bytes, bytearray)):
+                    processed_list.append(Binary(item))
+                elif isinstance(item, str):
+                    # strip out any "data:image/...;base64," prefix
+                    if item.startswith("data:"):
+                        item = item.split(",", 1)[1]
+                    try:
+                        raw = base64.b64decode(item)
+                        processed_list.append(Binary(raw))
+                    except Exception as e:
+                        raise ValueError(f"Could not base64-decode egm list item: {e}")
+                else:
+                    raise ValueError(f"Unsupported EGM list item type: {type(item)}")
+            return processed_list
+
+        # if it's bytes, wrap in Binary
+        if isinstance(v, (bytes, bytearray)):
+            return Binary(v)
+
+        # if it's a base64 string (with or without data: prefix)
+        if isinstance(v, str):
+            # strip out any "data:image/...;base64," prefix
+            if v.startswith("data:"):
+                v = v.split(",", 1)[1]
+            try:
+                raw = base64.b64decode(v)
+            except Exception as e:
+                raise ValueError(f"Could not base64-decode egm: {e}")
+            return Binary(raw)
+
+        raise ValueError(f"Unsupported EGM type: {type(v)}")
+
     
 class Diagnosis(BaseModel):
     """

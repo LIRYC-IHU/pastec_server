@@ -209,6 +209,7 @@ async def upload_episode(
                     "labels": labels,
                     "exists": True,
                     "annotated": True if existing_episode.annotations else False,
+                    "egm_uploaded": True if existing_episode.egm else False,
                     "ai_available": ai_available,
                     "ai_clients": ai_clients if ai_available else [],
                     "jobs": jobs if jobs else []
@@ -248,7 +249,8 @@ async def upload_episode(
                 "episode_type": episode.episode_type,
                 "labels": labels,
                 "exists": False,
-                "annotated": False
+                "annotated": False,
+                "egm_uploaded": False
             }
         )
     except Exception as e:
@@ -335,13 +337,16 @@ async def update_diagnosis(
     logger.info(f"labels: {labels}")
 
     # Vérifier si l'utilisateur est bien un expert
-    user: User = auth_info.get("info")
-    if not user:
+
+    if not auth_info:
         logger.error("❌ Aucune information utilisateur trouvée.")
         raise HTTPException(403, "User information is missing")
 
-    username = user.username
-    realm_roles = user.realm_roles
+    logger.info(f"👤 Informations utilisateur: {auth_info}")
+
+    username = auth_info.username
+    realm_roles = auth_info.realm_roles
+    
     logger.info(f"👤 Utilisateur: {username} | Rôles: {realm_roles}")
     
     try:
@@ -424,7 +429,7 @@ async def post_processing_time(
     
     username = auth.username
     
-    user_type = auth.groups[0] if auth.groups else "unknown"
+    user_type = auth.groups[1] if auth.groups else "unknown"
     
     try:
         processing_time = float(processing_time)
@@ -470,7 +475,7 @@ Routes for EGM handling
 async def get_episode_egm(
     episode_id: str, 
     auth: Annotated[User, Depends(check_authorization("read-region-db"))],
-    ) -> FileResponse:
+    ):
     logger.info(f"Requête reçue pour obtenir l'EGM avec episode_id: {episode_id} et auth_info: {auth}")
     """
     Récupère l'EGM d'un épisode spécifique
@@ -493,36 +498,197 @@ async def get_episode_egm(
         if not hasattr(episode, 'egm') or not episode.egm:
             raise HTTPException(404, detail='No EGM stored for this episode.')
         
-        # Créer un fichier temporaire pour stocker l'EGM
-        temp_file = f"/tmp/{episode_id}.svg"
         import base64
-
-        # Récupération des données brutes
-        data = episode.egm if isinstance(episode.egm, (bytes, bytearray, Binary)) else episode.egm.encode()
-
-        # Détection : si c'est du XML (<svg), on écrit directement, sinon on essaie une décodage base64
-        if data.lstrip().startswith(b'<'):
-            svg_bytes = data
-        else:
-            try:
-                svg_bytes = base64.b64decode(data)
-            except Exception:
-                svg_bytes = data
-
-        # Écriture dans le fichier temporaire
-        with open(temp_file, "wb") as f:
-            f.write(svg_bytes)
         
-        # Retourner le fichier
-        return FileResponse(
-            path=temp_file,
-            filename=f"episode_{episode_id}.svg",
-            media_type="image/svg+xml",
-            background=BackgroundTask(lambda: os.remove(temp_file))
-        )
+        # Handle both single binary and list of binaries
+        if isinstance(episode.egm, list):
+            # Multiple images - return JSON with all images as base64
+            images = []
+            for i, data in enumerate(episode.egm):
+                if isinstance(data, Binary):
+                    file_bytes = bytes(data)
+                elif isinstance(data, (bytes, bytearray)):
+                    file_bytes = data
+                else:
+                    try:
+                        file_bytes = base64.b64decode(data)
+                    except Exception:
+                        file_bytes = data.encode() if isinstance(data, str) else data
+                
+                # Encode to base64 for JSON response
+                base64_data = base64.b64encode(file_bytes).decode('utf-8')
+                images.append({
+                    "index": i,
+                    "data": base64_data,
+                    "format": "png"  # Assuming PNG for multiple images from Medtronic
+                })
+            
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "episode_id": episode_id,
+                    "type": "multiple",
+                    "count": len(images),
+                    "images": images
+                }
+            )
+        else:
+            # Single image - return as file
+            data = episode.egm
+            raw_data = data if isinstance(data, (bytes, bytearray, Binary)) else data.encode()
+            
+            # Try to detect if it's SVG (XML) or binary image
+            if isinstance(raw_data, Binary):
+                check_data = bytes(raw_data)
+            else:
+                check_data = raw_data
+                
+            if check_data.lstrip().startswith(b'<'):
+                temp_file = f"/tmp/{episode_id}.svg"
+                filename = f"episode_{episode_id}.svg"
+                media_type = "image/svg+xml"
+                file_bytes = check_data
+            else:
+                temp_file = f"/tmp/{episode_id}.png"
+                filename = f"episode_{episode_id}.png" 
+                media_type = "image/png"
+                
+                if isinstance(data, Binary):
+                    file_bytes = bytes(data)
+                elif isinstance(data, (bytes, bytearray)):
+                    file_bytes = data
+                else:
+                    try:
+                        file_bytes = base64.b64decode(data)
+                    except Exception:
+                        file_bytes = data.encode() if isinstance(data, str) else data
+
+            # Write to temporary file
+            with open(temp_file, "wb") as f:
+                f.write(file_bytes)
+            
+            return FileResponse(
+                path=temp_file,
+                filename=filename,
+                media_type=media_type,
+                background=BackgroundTask(lambda: os.remove(temp_file))
+            )
         
     except Exception as e:
         logger.error(f"Erreur lors de la récupération de l'EGM: {str(e)}")
+        raise HTTPException(500, detail=str(e))
+
+
+@egm_router.get("/{episode_id}/egm/download")
+async def download_episode_egm_files(
+    episode_id: str,
+    auth: Annotated[User, Depends(check_authorization("read-region-db"))],
+    ) -> FileResponse:
+    """
+    Télécharge tous les fichiers EGM d'un épisode
+    - Si plusieurs images: retourne un fichier ZIP
+    - Si une seule image: retourne le fichier directement
+    
+    Parameters:
+    - episode_id: Identifiant unique de l'épisode
+    - auth: Utilisateur authentifié
+    
+    Returns:
+    - FileResponse contenant soit un ZIP (plusieurs images) soit le fichier unique
+    """
+    logger.info(f"Requête reçue pour télécharger les fichiers EGM pour episode_id: {episode_id}")
+    
+    try:
+        # Rechercher l'épisode par son ID
+        episode = await engine.find_one(Episode, Episode.episode_id == episode_id)
+        if not episode:
+            raise HTTPException(404, detail='No episode with this ID.')
+        
+        # Vérifier si l'EGM existe
+        if not hasattr(episode, 'egm') or not episode.egm:
+            raise HTTPException(404, detail='No EGM stored for this episode.')
+        
+        import base64
+        import zipfile
+        
+        # Handle both single binary and list of binaries
+        if isinstance(episode.egm, list):
+            # Multiple images - create ZIP file
+            logger.info(f"Creating ZIP file for {len(episode.egm)} images")
+            
+            temp_zip = f"/tmp/{episode_id}_egm_images.zip"
+            
+            with zipfile.ZipFile(temp_zip, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                for i, data in enumerate(episode.egm):
+                    # Extract binary data
+                    if isinstance(data, Binary):
+                        file_bytes = bytes(data)
+                    elif isinstance(data, (bytes, bytearray)):
+                        file_bytes = data
+                    else:
+                        try:
+                            file_bytes = base64.b64decode(data)
+                        except Exception:
+                            file_bytes = data.encode() if isinstance(data, str) else data
+                    
+                    # Add to ZIP with appropriate filename
+                    filename = f"egm_image_{i}.png"
+                    zipf.writestr(filename, file_bytes)
+                    logger.info(f"Added {filename} to ZIP ({len(file_bytes)} bytes)")
+            
+            return FileResponse(
+                path=temp_zip,
+                filename=f"episode_{episode_id}_egm_images.zip",
+                media_type="application/zip",
+                background=BackgroundTask(lambda: os.remove(temp_zip))
+            )
+        else:
+            # Single image - return file directly
+            logger.info("Returning single EGM file")
+            
+            data = episode.egm
+            # Try to detect format
+            raw_data = data if isinstance(data, (bytes, bytearray, Binary)) else data.encode()
+            if isinstance(raw_data, Binary):
+                check_data = bytes(raw_data)
+            else:
+                check_data = raw_data
+                
+            if check_data.lstrip().startswith(b'<'):
+                filename = f"episode_{episode_id}.svg"
+                media_type = "image/svg+xml"
+                extension = "svg"
+            else:
+                filename = f"episode_{episode_id}.png"
+                media_type = "image/png"
+                extension = "png"
+
+            # Extract binary data
+            if isinstance(data, Binary):
+                file_bytes = bytes(data)
+            elif isinstance(data, (bytes, bytearray)):
+                file_bytes = data
+            else:
+                try:
+                    file_bytes = base64.b64decode(data)
+                except Exception:
+                    file_bytes = data.encode() if isinstance(data, str) else data
+
+            # Create temporary file
+            temp_file = f"/tmp/{episode_id}.{extension}"
+            
+            with open(temp_file, "wb") as f:
+                f.write(file_bytes)
+            
+            return FileResponse(
+                path=temp_file,
+                filename=filename,
+                media_type=media_type,
+                background=BackgroundTask(lambda: os.remove(temp_file))
+            )
+        
+    except Exception as e:
+        logger.error(f"Erreur lors du téléchargement des fichiers EGM: {str(e)}")
         raise HTTPException(500, detail=str(e))
 
 
@@ -530,58 +696,58 @@ async def get_episode_egm(
 async def post_episode_egm(
     user: Annotated[User, Depends(get_user_info)],
     episode_id: str,
-    file: UploadFile = File(...)
+    files: List[UploadFile] = File(...)
 ):
-    logger.info(f"Tentative d'upload EGM pour l'épisode {episode_id} par l'utilisateur {user.username}")
-    logger.info(f"Tentative d'upload EGM pour l'épisode {episode_id}")
-    logger.info(f"Fichier reçu: {file.filename}")
-    logger.info(f"Content type: {file.content_type}")
-    logger.info(f"Headers: {file.headers}")
     
     try:
+        logger.info(f"Tentative d'upload EGM pour l'épisode {episode_id} par l'utilisateur {user.username}")
+        logger.info(f"Tentative d'upload EGM pour l'épisode {episode_id}")
+        logger.info(f"Nombre de fichiers reçus: {len(files)}")
+        
+        for file in files:
+            logger.info(f"Fichier reçu: {file.filename}")
+            logger.info(f"Content type: {file.content_type}")
+            logger.info(f"Headers: {file.headers}")
+
         episode = await engine.find_one(Episode, Episode.episode_id == episode_id)
         if not episode:
             logger.error(f"Episode {episode_id} non trouvé")
             raise HTTPException(404, detail='No episode with this ID.')
         
-        try:
-            # Lire le contenu du fichier avec gestion explicite des erreurs
-            content = b""
-            chunk_size = 1024 * 1024  # 1MB chunks
-            while chunk := await file.read(chunk_size):
-                content += chunk
-                logger.info(f"Lu {len(chunk)} bytes")
-            
-            logger.info(f"Taille totale du fichier: {len(content)} bytes")
-            
-            if len(content) == 0:
-                raise HTTPException(400, detail="Empty file received")
-            
-            # Stocker l'EGM dans l'épisode
+        if len(files) == 1:
+            # Si un seul fichier, on le traite comme un EGM unique
+            content = await files[0].read()
+            if not content:
+                logger.error(f"Le fichier {files[0].filename} is empty")
+                raise HTTPException(400, detail=f"File {files[0].filename} is empty")
             episode.egm = Binary(content)
-            await engine.save(episode)
-            jobs = []
-            ai_clients, ai_available = await send_to_ai(episode.manufacturer, episode.episode_type, episode_id, jobs)
+        else:
+            # Plusieurs fichiers, on stocke comme une liste de Binary
+            binaries = []
+            for upload in files:
+                content = await upload.read()
+                if not content:
+                    logger.error(f"Le fichier {upload.filename} is empty")
+                    raise HTTPException(400, detail=f"File {upload.filename} is empty")
+                binaries.append(Binary(content))
+            episode.egm = binaries
             
-            logger.info(f"EGM sauvegardé avec succès pour l'épisode {episode_id}")
-            
-            return JSONResponse(
-                status_code=201,
-                content={
-                    "message": "EGM stored successfully",
-                    "ai_available": ai_available,
-                    "ai_clients": ai_clients if ai_available else [],
-                    "jobs": jobs if jobs else []}
-            )
 
-        except Exception as read_error:
-            logger.error(f"Erreur lors de la lecture du fichier: {str(read_error)}")
-            logger.exception("Traceback de l'erreur de lecture:")
-            raise HTTPException(400, detail=f"Error reading file: {str(read_error)}")
-            
-    except ValueError as e:
-        logger.error(f"Erreur de format d'ID: {str(e)}")
-        raise HTTPException(400, detail=f"Invalid episode ID format: {str(e)}")
+        episode.updated_at = datetime.now()  # Mettre à jour la date de modificationx
+        await engine.save(episode)
+        jobs = []
+        ai_clients, ai_available = await send_to_ai(episode.manufacturer, episode.episode_type, episode_id, jobs)
+        
+        logger.info(f"EGM sauvegardé avec succès pour l'épisode {episode_id}")
+        
+        return JSONResponse(
+            status_code=201,
+            content={
+                "message": "EGM stored successfully",
+                "ai_available": ai_available,
+                "ai_clients": ai_clients if ai_available else [],
+                "jobs": jobs if jobs else []}
+        )
     except Exception as e:
         logger.error(f"Erreur lors de l'upload de l'EGM: {str(e)}")
         logger.exception("Traceback complet:")
@@ -610,7 +776,7 @@ async def put_episode_annotation(
             raise HTTPException(404, detail='No episode with this ID.')
 
         logger.info("user group: ", auth_info.groups )
-        group = auth_info.groups[0]
+        group = auth_info.groups[1]
         new_annotation = Annotation(
             user=auth_info.username,
             user_type=UserType(group),  
@@ -620,6 +786,7 @@ async def put_episode_annotation(
 
         # Ajouter l'annotation à la liste des annotations de l'épisode
         episode.annotations.append(new_annotation)
+        episode.updated_at = datetime.now()  # Mettre à jour la date de modification
         await engine.save(episode)
         
         logger.info(f"Annotation ajoutée avec succès pour l'épisode {episode_id}")

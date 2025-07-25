@@ -104,7 +104,7 @@ async def get_user_info(payload: dict = Depends(get_payload)) -> User:
         groups_claim = [group.strip('/') for group in groups_claim]
     
         logger.info(f"Groups Claim: {groups_claim}")
-        return User(
+        response = User(
             id=payload.get("sub"),
             username=payload.get("preferred_username"),
             email=payload.get("email"),
@@ -114,6 +114,10 @@ async def get_user_info(payload: dict = Depends(get_payload)) -> User:
             client_roles=resource_access['pastec_server']['roles'],
             groups=groups_claim 
         )
+        
+        logger.info(f"User Info: {response}")
+        
+        return response
     except Exception as e:
         logger.error(f"Error extracting user info: {str(e)}")
         raise HTTPException(status_code=400, detail="Invalid token payload")
