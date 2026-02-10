@@ -1,0 +1,107 @@
+services:
+  fastapi-app:
+    container_name: fastapi-dev
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    working_dir: /app
+    env_file:
+      - .env.dev
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/app  # Montage du code source pour le live reload
+    command: >
+      uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      - mongodb
+      - keycloak
+    networks:
+      - backend-network
+
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb-dev
+    env_file:
+      - .env.dev
+    restart: unless-stopped
+    volumes:
+      - ./data/mongo:/data/db  # Volume local pour MongoDB
+    ports:
+      - "27017:27017"
+    networks:
+      - backend-network
+
+  postgres:
+    image: postgres:13
+    container_name: keycloak_postgres-dev
+    volumes:
+     - ./docker/postgres:/var/lib/postgresql/data
+    env_file:
+      - .env.dev
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "keycloak"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - backend-network
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.2
+    container_name: keycloak-dev
+    command: start-dev 
+    ports:
+      - "8084:8080"
+    env_file:
+      - .env.dev
+    environment:
+      KC_HOSTNAME_STRICT: false
+      KC_HOSTNAME_STRICT_HTTPS: false 
+      KC_PROXY: edge
+      KC_HTTP_ENABLED: true
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      KC_DB_USERNAME: ${POSTGRES_USER}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - backend-network
+
+  ai_worker:
+    build:
+      context: ./ai_worker
+      dockerfile: Dockerfile
+    container_name: ai_worker-dev
+    ports:
+      - "8001:8001"
+    working_dir: /app
+    restart: always
+    volumes:
+      - ./ai_worker:/app  # Montage du code source pour le live reload
+    command: >
+      uvicorn main:app --host 0.0.0.0 --port 8001 --reload --reload-dir /app
+    env_file:
+      - .env.dev
+    depends_on:
+      - fastapi-app
+      - keycloak
+      - mongodb
+    networks:
+      - backend-network
+
+volumes:
+  mongo_data:
+  postgres_data:
+
+networks:
+  backend-network:
+    driver: bridge

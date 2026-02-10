@@ -1,0 +1,144 @@
+services:
+  fastapi-app:
+    container_name: fastapi
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    working_dir: /app
+
+    # ⬇️ multi-workers
+    command: >
+      gunicorn ${APP_MODULE:-main:app}
+      -k uvicorn.workers.UvicornWorker
+      -w ${WEB_CONCURRENCY:-4}
+      -b 0.0.0.0:8000
+      --timeout ${GUNICORN_TIMEOUT:-120}
+      --keep-alive 30
+      --graceful-timeout 30
+      --log-level info
+      --access-logfile -
+      --error-logfile -
+
+    env_file:
+      - .env.prod
+
+    ports:
+      - "8000:8000"
+
+    depends_on:
+      - mongodb
+      - keycloak
+
+    ulimits:
+      nofile: 65536
+
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/docs || exit 1"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+    restart: unless-stopped
+    networks:
+      - backend-network
+
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb
+    user: 1000:1000
+    env_file:
+      - .env.prod
+    restart: unless-stopped
+    volumes:
+      - /mnt/storage/pastec:/data/db
+    ports:
+      - "27018:27017"
+    networks:
+      - backend-network
+
+  postgres:
+    image: postgres:13
+    container_name: keycloak_postgres
+    env_file:
+      - .env.prod
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "keycloak"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - /mnt/storage/postgres_keycloak:/var/lib/postgresql/data
+    networks:
+      - backend-network
+    
+  postgres-backup:
+    image: postgres:13
+    depends_on:
+      - postgres
+    volumes:
+      - ./tmp/db/pastec_postgres:/backup
+    env_file:
+      - .env.prod
+    command: >
+      bash -c "while true; do
+        PGPASSWORD=$$POSTGRES_PASSWORD pg_dump -h postgres -U $$POSTGRES_USER -Fc $$POSTGRES_DB > /backup/$$(date +%Y-%m-%d-%H-%M-%S).dump
+        echo ""Backup done at $$(date +%Y-%m-%d_%H:%M:%S)""
+        ls -1 /backup/*.dump | head -n -2 | xargs rm -f
+        sleep 86400
+      done"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    networks:
+      - backend-network
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.2
+    container_name: keycloak
+    command: start --hostname https://pastec.ihu-liryc.fr/auth/ --proxy-headers xforwarded --hostname-debug=true
+    ports:
+      - "8084:8080"
+    env_file:
+      - .env.prod
+    environment:
+      KC_HTTP_ENABLED: true
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      KC_DB_USERNAME: ${POSTGRES_USER}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      KC_IMPORT: /opt/keycloak/data/import
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - backend-network
+    restart: unless-stopped
+
+  ai_worker:
+    build: 
+      context: ./ai_worker
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
+    restart: always
+    env_file:
+      - .env.prod
+    depends_on:
+      - fastapi-app
+      - keycloak
+      - mongodb
+    networks:
+      - backend-network
+  
+networks:
+  backend-network:
+    driver: bridge
+

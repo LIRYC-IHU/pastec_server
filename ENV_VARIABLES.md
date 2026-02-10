@@ -1,0 +1,268 @@
+# Variables d'Environnement - PASTEC Backend
+
+Ce document décrit toutes les variables d'environnement nécessaires au bon fonctionnement de l'application PASTEC.
+
+## 📋 Table des Matières
+
+- [Configuration de Base](#configuration-de-base)
+- [Keycloak (Authentification)](#keycloak-authentification)
+- [Bases de Données](#bases-de-données)
+- [Services AI](#services-ai)
+- [Sécurité](#sécurité)
+- [Fichiers de Configuration](#fichiers-de-configuration)
+
+---
+
+## Configuration de Base
+
+### `APP_MODULE`
+- **Description**: Module ASGI à charger pour Gunicorn
+- **Valeur par défaut**: `main:app`
+- **Requis**: Non (utilise la valeur par défaut)
+- **Exemple**: `main:app`
+
+### `WEB_CONCURRENCY`
+- **Description**: Nombre de workers Gunicorn
+- **Valeur par défaut**: `4`
+- **Requis**: Non
+- **Exemple**: `2` (dev), `4` (prod)
+- **Note**: Ajustez selon les ressources CPU disponibles
+
+### `GUNICORN_TIMEOUT`
+- **Description**: Timeout en secondes pour les requêtes Gunicorn
+- **Valeur par défaut**: `120`
+- **Requis**: Non
+- **Exemple**: `120`
+
+---
+
+## Keycloak (Authentification)
+
+### `KEYCLOAK_SERVER_URL`
+- **Description**: URL publique du serveur Keycloak (accessible depuis l'extérieur)
+- **Requis**: ✅ **OUI**
+- **Exemple Dev**: `http://localhost:8084`
+- **Exemple Prod**: `https://pastec.ihu-liryc.fr/auth`
+- **Note**: Cette URL est utilisée par les clients pour s'authentifier
+
+### `KEYCLOAK_INTERNAL_SERVER_URL`
+- **Description**: URL interne du serveur Keycloak (pour communication entre conteneurs)
+- **Requis**: ✅ **OUI**
+- **Exemple**: `http://keycloak:8080`
+- **Note**: Utilisé pour la communication backend-to-backend
+
+### `KEYCLOAK_REALM`
+- **Description**: Nom du realm Keycloak
+- **Requis**: ✅ **OUI**
+- **Exemple**: `pastec`
+
+### `KEYCLOAK_CLIENT_ID`
+- **Description**: ID du client Keycloak pour l'application
+- **Requis**: ✅ **OUI**
+- **Exemple**: `pastec_server`
+
+### `KEYCLOAK_CLIENT_SECRET`
+- **Description**: Secret du client Keycloak
+- **Requis**: ✅ **OUI - SENSIBLE** 🔒
+- **Exemple**: `dsaImyh0BaQyMiLcaGwhN5ZidUqLz3Lj`
+- **Note**: À générer depuis la console Keycloak. **NE JAMAIS COMMITTER**
+
+### `KEYCLOAK_ADMIN_CLIENT_SECRET`
+- **Description**: Secret du client admin Keycloak
+- **Requis**: ✅ **OUI - SENSIBLE** 🔒
+- **Exemple**: `DGrODPab1F5nQAS1ojAOlsMpXvUUwG8T`
+- **Note**: Utilisé pour les opérations administratives. **NE JAMAIS COMMITTER**
+
+### `KEYCLOAK_ADMIN`
+- **Description**: Nom d'utilisateur de l'administrateur Keycloak
+- **Requis**: ✅ **OUI**
+- **Exemple**: `admin`
+- **Note**: Compte super-admin Keycloak
+
+### `KEYCLOAK_ADMIN_PASSWORD`
+- **Description**: Mot de passe de l'administrateur Keycloak
+- **Requis**: ✅ **OUI - SENSIBLE** 🔒
+- **Exemple**: `adminpassword`
+- **Note**: **NE JAMAIS COMMITTER**
+
+### `KEYCLOAK_PASTEC_ADMIN`
+- **Description**: Nom d'utilisateur de l'administrateur applicatif PASTEC
+- **Requis**: ✅ **OUI**
+- **Exemple**: `pastec-admin`
+
+### `KEYCLOAK_PASTEC_ADMIN_PASSWORD`
+- **Description**: Mot de passe de l'administrateur applicatif PASTEC
+- **Requis**: ✅ **OUI - SENSIBLE** 🔒
+- **Exemple**: `test`
+- **Note**: **NE JAMAIS COMMITTER**
+
+### `TEST_ADMIN_USERNAME` (Dev uniquement)
+- **Description**: Nom d'utilisateur pour les tests en développement
+- **Requis**: Non (dev uniquement)
+- **Exemple**: `test_admin`
+
+### `TEST_ADMIN_PASSWORD` (Dev uniquement)
+- **Description**: Mot de passe pour les tests en développement
+- **Requis**: Non (dev uniquement) - **SENSIBLE** 🔒
+- **Exemple**: `test_password`
+
+---
+
+## Bases de Données
+
+### MongoDB
+
+#### `MONGODB_URI`
+- **Description**: URI de connexion à MongoDB
+- **Requis**: ✅ **OUI**
+- **Exemple**: `mongodb://mongodb:27017/pastec_db`
+- **Note**: Format: `mongodb://[host]:[port]/[database]`
+
+#### `MONGODB_DB_NAME`
+- **Description**: Nom de la base de données MongoDB
+- **Requis**: ✅ **OUI**
+- **Exemple**: `pastec_db`
+
+### PostgreSQL (pour Keycloak)
+
+#### `POSTGRES_DB`
+- **Description**: Nom de la base de données PostgreSQL
+- **Requis**: ✅ **OUI**
+- **Exemple**: `keycloak`
+
+#### `POSTGRES_USER`
+- **Description**: Nom d'utilisateur PostgreSQL
+- **Requis**: ✅ **OUI**
+- **Exemple**: `keycloak`
+
+#### `POSTGRES_PASSWORD`
+- **Description**: Mot de passe PostgreSQL
+- **Requis**: ✅ **OUI - SENSIBLE** 🔒
+- **Exemple**: `password`
+- **Note**: **NE JAMAIS COMMITTER**
+
+---
+
+## Services AI
+
+### `AI_WORKER_URL`
+- **Description**: URL du service AI Worker
+- **Requis**: ✅ **OUI**
+- **Exemple**: `http://ai_worker:8001`
+- **Note**: Utilisé pour les requêtes d'analyse IA
+
+### `FASTAPI_URL`
+- **Description**: URL du service FastAPI principal (pour communication entre services)
+- **Requis**: ✅ **OUI**
+- **Exemple**: `http://fastapi-app:8000`
+
+---
+
+## Sécurité
+
+### `JWT_PEPPER`
+- **Description**: Clé secrète pour le hachage des tokens JWT
+- **Requis**: Recommandé - **SENSIBLE** 🔒
+- **Exemple**: `dev-pepper-changeme-random-string`
+- **Note**: Chaîne aléatoire forte. **NE JAMAIS COMMITTER**
+- **Génération**: `openssl rand -hex 32`
+
+---
+
+## Fichiers de Configuration
+
+Le projet utilise plusieurs fichiers `.env` pour gérer les configurations:
+
+### 📄 `.env.example`
+Template documenté avec toutes les variables nécessaires.  
+**Ce fichier PEUT être commité** (ne contient pas de secrets).
+
+### 📄 `.env.dev`
+Configuration pour l'environnement de développement.  
+**NE JAMAIS COMMITTER** - Contient des secrets de développement.
+
+### 📄 `.env.prod`
+Configuration pour l'environnement de production.  
+**NE JAMAIS COMMITTER** - Contient des secrets de production.
+
+---
+
+## 🚀 Démarrage Rapide
+
+### Développement
+
+```bash
+# 1. Copier le template
+cp .env.example .env.dev
+
+# 2. Éditer et remplir les valeurs
+nano .env.dev
+
+# 3. Lancer avec Docker Compose
+docker-compose -f docker-compose-dev.yml --env-file .env.dev up
+```
+
+### Production
+
+```bash
+# 1. Copier le template
+cp .env.example .env.prod
+
+# 2. Éditer et remplir les valeurs de production (utiliser des valeurs fortes!)
+nano .env.prod
+
+# 3. Lancer avec Docker Compose
+docker-compose --env-file .env.prod up -d
+```
+
+---
+
+## 🔐 Bonnes Pratiques de Sécurité
+
+1. **Ne jamais committer les fichiers `.env.dev` ou `.env.prod`**
+2. **Utiliser des mots de passe forts** (minimum 16 caractères, aléatoires)
+3. **Rotation régulière des secrets** en production
+4. **Utiliser un gestionnaire de secrets** (Vault, AWS Secrets Manager, etc.) en production
+5. **Restreindre l'accès** aux fichiers `.env` (permissions 600)
+6. **Différencier les secrets** dev/staging/prod
+7. **Documenter les changements** de configuration
+
+---
+
+## 🛠️ Génération de Secrets Forts
+
+```bash
+# Générer un secret aléatoire de 32 caractères
+openssl rand -hex 32
+
+# Générer un mot de passe fort
+openssl rand -base64 24
+
+# Générer un UUID
+uuidgen
+```
+
+---
+
+## ⚠️ Résolution de Problèmes
+
+### Erreur: "KEYCLOAK_CLIENT_SECRET must be set in environment variables"
+**Solution**: Vérifiez que toutes les variables requises sont définies dans votre fichier `.env`
+
+### Erreur de connexion à Keycloak
+**Solution**: Vérifiez les URLs `KEYCLOAK_SERVER_URL` et `KEYCLOAK_INTERNAL_SERVER_URL`
+
+### Erreur de connexion MongoDB/PostgreSQL
+**Solution**: Vérifiez que les conteneurs de base de données sont démarrés et accessibles
+
+---
+
+## 📞 Support
+
+Pour toute question ou problème de configuration, contactez:
+- **Email**: benjamin.sacristan@chu-bordeaux.fr
+- **Documentation**: Voir README.md
+
+---
+
+**Dernière mise à jour**: Février 2026

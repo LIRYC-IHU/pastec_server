@@ -1,0 +1,84 @@
+# =============================================================================
+# PASTEC Backend - .gitignore
+# =============================================================================
+
+# ---- Python ----
+**/__pycache__/
+*.py[cod]
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ---- Variables d'environnement & Secrets ----
+.env
+.env.dev
+.env.prod
+.env.local
+.env.*.local
+*.pem
+*.pem.pub
+**/private_keys/
+key.pepper
+pepper_*.txt
+
+# ---- Docker & Base de données ----
+docker-compose-dev.yml.local
+data/
+docker/postgres/
+tmp/
+*.dump
+db_dump*
+backup/
+
+# ---- Keycloak ----
+keycloak-import/
+
+# ---- Modèles AI ----
+*.h5
+*.pkl
+*.pt
+*.onnx
+ai_worker/ai_models/
+ai_models_backup/
+AImodel_*.h5
+BIOTRONIK_*.h5
+
+# ---- Logs ----
+*.log
+log.txt
+*.txt.log
+
+# ---- JSON sensibles ----
+app/**/*.json
+!app/diagnosis-maps.json
+*.json
+!package.json
+!tsconfig*.json
+
+# ---- Système ----
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ---- Environnements virtuels ----
+.venv/
+venv/
+env/
+ENV/
+
+# ---- Clés SSH ----
+*.key
+id_rsa*
+ec2-user@*
+
+# ---- GraphQL généré ----
+backend/app/services/gql_schema.py
