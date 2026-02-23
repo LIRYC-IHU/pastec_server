@@ -1,41 +1,7 @@
-# PASTEC Backend API
-
-## Overview
-
-The PASTEC (Platform for AI-Supported Telemonitoring in Cardiology) Backend is a FastAPI-based REST API server designed to manage cardiac arrhythmia episode data, electrograms (EGMs), clinical annotations, and AI-powered analysis workflows. It serves as the central data hub for the multi-center PASTEC research project.
-
-
-For multicenter academic collaborations, we recommend joining the **hosted academic instance** (IHU LIRYC).
-Self-hosting is supported but intended for institutions with dedicated IT/security resources.
-
-## Key Features
-
-- **Episode Management**: Store and retrieve cardiac episode metadata and EGM images
-- **User Authentication**: Keycloak-based OAuth2/JWT authentication with role-based access control (RBAC)
-- **Clinical Annotations**: Multi-annotator support with conflict resolution
-- **AI Integration**: Queue management for AI model inference with asynchronous job processing
-- **Data Privacy**: HMAC-based patient pseudonymization with center-specific pepper values
-- **Multi-Manufacturer Support**: Handles data from Medtronic, Biotronik, Boston Scientific, Abbott, and Microport devices
-
-## Architecture
-
-```
-┌──────────────┐      ┌──────────────┐      ┌──────────────┐
-│   Chrome     │─────▶│   FastAPI    │─────▶│   MongoDB    │
-│  Extension   │      │     App      │      │  (Episodes)  │
-└──────────────┘      └──────────────┘      └──────────────┘
-                             │
-                             │
-                      ┌──────┴──────┐
-                      │             │
-                 ┌────▼────┐   ┌───▼────┐
-                 │Keycloak │   │   AI   │
-                 │  Auth   │   │ Worker │
-                 └─────────┘   └────────┘
-```
+# PASTEC SERVER
+This repository contains the backend of the PASTEC project.
 
 ## PASTEC project overview
-
 The data flows between the different components of the PASTEC project are presented in the following diagram:
 ![image info](./docs/architecture.drawio.svg)
 
@@ -43,88 +9,7 @@ The central part of this diagram is the PASTEC server.
 
 The PASTEC server is a FastAPI application, running with a MongoDB database. User management rights are handled using a keycloak instance.
 
-## Technology Stack
-
-- **Framework**: FastAPI (Python 3.11+)
-- **Database**: MongoDB (with ODMantic ORM)
-- **Authentication**: Keycloak (OAuth2/OpenID Connect)
-- **API Documentation**: OpenAPI 3.0 (Swagger UI)
-- **Deployment**: Docker + Docker Compose
-- **ASGI Server**: Gunicorn + Uvicorn workers
-- **AI Queue**: Celery (Redis backend)
-
-## Quick Start
-
-### Prerequisites
-
-- Docker & Docker Compose
-- Python 3.11+ (for local development)
-- MongoDB 5.0+
-- Keycloak 22+
-
-### Installation
-
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/LIRYC-IHU/pastec_server.git
-   cd pastec_server
-   ```
-
-2. **Configure environment variables**
-   ```bash
-   cp .env.example .env.prod
-   # Edit .env.prod with your configuration
-   ```
-   See [ENV_VARIABLES.md](./ENV_VARIABLES.md) for complete configuration documentation.
-
-3. **Start services with Docker Compose**
-   ```bash
-   docker-compose up -d
-   ```
-
-4. **Verify deployment**
-   ```bash
-   curl http://localhost:8000/docs
-   ```
-
-The API will be available at:
-- **API Docs**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
-- **Keycloak Admin**: http://localhost:8084
-
-## Configuration
-
-All configuration is managed through environment variables. Essential variables include:
-
-```bash
-# Keycloak Authentication
-KEYCLOAK_SERVER_URL=http://localhost:8084
-KEYCLOAK_INTERNAL_SERVER_URL=http://keycloak:8080
-KEYCLOAK_REALM=pastec
-KEYCLOAK_CLIENT_ID=pastec_server
-KEYCLOAK_CLIENT_SECRET=your-secret-here
-
-# MongoDB
-MONGODB_HOST=mongodb
-MONGODB_PORT=27017
-MONGODB_DB_NAME=pastec_db
-MONGODB_USERNAME=pastec_user
-MONGODB_PASSWORD=your-password-here
-
-# Center-Specific Security
-PEPPER=64-character-hex-string-unique-per-center
-
-# AI Worker
-AI_WORKER_URL=http://ai-worker:8001
-```
-
-**📖 Complete documentation**: [ENV_VARIABLES.md](./ENV_VARIABLES.md)
-
-## Keycloak Setup
-
-### Initial Configuration
-
-After starting the services, configure Keycloak:
+## Setting up
 You will need to create a keycloak realm called `pastec` with a client called `pastec_server`. This will allow the identification of users on the system.
 
 App-mediated access operates via Keycloak admin API, and needs to add an admin user, in this test named `pastec-admin`.
@@ -273,54 +158,6 @@ All the routes interacting with the AI server use a job system to update the wor
     - `updated_at` (str): The last updated timestamp of the job.
 
 These routes ensure that AI jobs can be efficiently managed, including sending jobs for analysis, retrieving EGM data, adding annotations, and checking job statuses.
-
-## Security
-
-### Authentication Flow
-
-1. **User Login**: Chrome extension → `/users/login` → Keycloak
-2. **Token Issued**: JWT access token (15 min) + refresh token (30 min)
-3. **API Requests**: All endpoints require `Authorization: Bearer <token>`
-4. **Token Refresh**: Before expiration → `/users/token/refresh`
-5. **Token Validation**: Every request verified against Keycloak
-
-### Role-Based Access Control
-
-| Role | Permissions |
-|------|-------------|
-| `admin` | Full system access, user management |
-| `read-region-db` | Read episode data |
-| `write-region-db` | Upload episodes and EGMs |
-| `annotator` | Create clinical annotations |
-| `ai-model` | AI job processing |
-
-### Data Privacy
-
-- **Patient Pseudonymization**: HMAC-SHA256 with center-specific pepper
-- **Episode ID Hashing**: `HMAC(patient_id + system + episode_type + date + time, pepper)`
-- **No Reversible Data**: Original patient identifiers never stored
-- **Center Isolation**: Different peppers prevent cross-center correlation
-
-## API Documentation
-
-Interactive API documentation is available at:
-- **Swagger UI**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
-
-For detailed API endpoint documentation, authentication flows, and request/response examples, refer to the interactive docs.
-
-## Related Documentation
-
-- **[ENV_VARIABLES.md](./ENV_VARIABLES.md)** - Complete environment variable reference and configuration guide
-- **[DEPLOYMENT.md](./DEPLOYMENT.md)** - Docker deployment, scaling, monitoring, and troubleshooting
-- **[Chrome Extension README](../chrome_ext/README.md)** - Client-side documentation
-- **[Chrome Extension Security](../chrome_ext/SECURITY.md)** - Security best practices
-
-## License
-
-This project is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0).
-
-See [LICENSE.md](./LICENSE.md) for full license text.
 
 # The AI Worker server
 
