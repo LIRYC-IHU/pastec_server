@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
-from db import Episode, User
+from db import CenterPepper, Episode, User
 from auth import check_authorization
 from typing import Annotated
 from routers.episode import episode_router, egm_router, annotation_router
@@ -209,4 +209,5 @@ async def startup_event():
     
     coll_scraping = engine.get_collection(ScrapedEpisode)
     await coll_scraping.create_index([("episode_id", ASCENDING)], unique=True)
-
+    coll_peppers = engine.get_collection(CenterPepper)
+    await coll_peppers.create_index([("center", ASCENDING)], unique=True)

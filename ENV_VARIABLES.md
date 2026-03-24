@@ -167,6 +167,46 @@ Ce document décrit toutes les variables d'environnement nécessaires au bon fon
 - **Note**: Chaîne aléatoire forte. **NE JAMAIS COMMITTER**
 - **Génération**: `openssl rand -hex 32`
 
+### `CONFIG_BUNDLE_SIGNING_PRIVATE_KEY`
+- **Description**: Clé privée PEM utilisée pour signer les bundles de configuration centre remis aux utilisateurs.
+- **Requis**: ✅ **OUI** si vous utilisez le provisionnement par bundle signé
+- **Note**: À conserver côté backend uniquement. Le backend ne conserve pas le pepper brut après génération; il signe simplement le bundle remis une seule fois à l'admin local.
+
+### `CONFIG_BUNDLE_SIGNING_PUBLIC_KEY`
+- **Description**: Clé publique PEM associée, utilisée pour exposer la clé de vérification des bundles.
+- **Requis**: Non si elle peut être dérivée de la clé privée
+- **Note**: Peut être fournie explicitement pour éviter toute ambiguïté opérationnelle.
+
+### `AUTH_CENTER_GROUP_PREFIX`
+- **Description**: Préfixe de groupe Keycloak interprété comme un rattachement centre.
+- **Valeur par défaut**: `centers`
+- **Exemple**: un groupe `/centers/bordeaux` donnera l'accès au centre `bordeaux`
+
+### `AUTH_PROJECT_GROUP_PREFIX`
+- **Description**: Préfixe de groupe Keycloak interprété comme un rattachement projet.
+- **Valeur par défaut**: `projects`
+- **Exemple**: un groupe `/projects/afib-study` donnera l'accès au projet `afib-study`
+
+### `AUTH_CENTER_ROLE_PREFIX`
+- **Description**: Préfixe de rôle interprété comme un rattachement centre.
+- **Valeur par défaut**: `center:`
+- **Exemple**: `center:bordeaux`
+
+### `AUTH_PROJECT_ROLE_PREFIX`
+- **Description**: Préfixe de rôle interprété comme un rattachement projet.
+- **Valeur par défaut**: `project:`
+- **Exemple**: `project:afib-study`
+
+### `AUTH_GLOBAL_ACCESS_ROLES`
+- **Description**: Liste de rôles séparés par des virgules qui contournent les restrictions centre/projet.
+- **Valeur par défaut**: `pastec-admin`
+- **Exemple**: `pastec-admin,super-reader`
+
+### `AUTH_ALLOW_LEGACY_UNSCOPED_ACCESS`
+- **Description**: Autorise temporairement l'accès aux épisodes historiques ne possédant pas encore de champ `center`.
+- **Valeur par défaut**: `true`
+- **Note**: Passez à `false` une fois les données historiques migrées.
+
 ---
 
 ## Fichiers de Configuration

@@ -1,17 +1,18 @@
-from fastapi import APIRouter, Depends, HTTPException
+import json
+
+from fastapi import APIRouter, Depends, HTTPException, Response
 from typing import Annotated
-from db import Center, UserType, UserEntry, User, Token
-from fastapi import Form, Header
-from services.keycloak_service import KeycloakService, create_new_user, reset_password
-import httpx
+from db import Center, UserType, UserEntry, User
+from fastapi import Form
+from fastapi.responses import PlainTextResponse
+from services.config_bundle_service import build_signed_center_bundle, get_public_key_pem
+from services.pepper_service import create_center_pepper
+from services.keycloak_service import create_new_user, reset_password
 import logging
 from fastapi.responses import HTMLResponse, JSONResponse
-from auth import check_authorization, get_token_with_credentials, get_refresh_token
-from settings import KEYCLOAK_CLIENT_ID, KEYCLOAK_INTERNAL_SERVER_URL, KEYCLOAK_REALM, KEYCLOAK_CLIENT_ID 
+from auth import build_user_from_payload, check_authorization, decode_token, get_refresh_token
 import os
 from keycloak import KeycloakOpenID
-
-KEYCLOAK_INTROSPECT_URL = f"{KEYCLOAK_INTERNAL_SERVER_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/token/introspect"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -25,9 +26,53 @@ user_router = APIRouter(
 )
 
 @user_router.get("/roles")
-def user_roles(user: Annotated[User, Depends(check_authorization)]):
-    return {'realm_roles': user.realm_roles,
-            'client_roles': user.client_roles}
+def user_roles(user: Annotated[User, Depends(check_authorization())]):
+    return {
+        "realm_roles": user.realm_roles,
+        "client_roles": user.client_roles,
+        "roles": user.roles,
+        "centers": user.centers,
+        "projects": user.projects,
+        "primary_center": user.primary_center,
+        "user_type": user.user_type,
+    }
+
+
+@user_router.get("/me/access")
+def my_access(user: Annotated[User, Depends(check_authorization())]):
+    return user.model_dump()
+
+
+@user_router.post("/centers/{center}/pepper")
+async def create_pepper_for_center(
+    center: str,
+    api_url: str | None = None,
+    rights: User = Depends(check_authorization("pastec-admin"))
+) -> Response:
+    record, pepper = await create_center_pepper(center=center, created_by=rights.username)
+    bundle = build_signed_center_bundle(
+        center=record.center,
+        pepper=pepper,
+        api_url=api_url,
+        created_by=rights.username,
+    )
+    bundle_filename = f"pastec-center-{record.center}-bundle.json"
+    return Response(
+        content=json.dumps(bundle, sort_keys=True, indent=2),
+        media_type="application/json",
+        status_code=201,
+        headers={
+            "Content-Disposition": f'attachment; filename="{bundle_filename}"',
+            "X-PASTEC-Center": record.center,
+            "X-PASTEC-Pepper-Hash": record.pepper_hash,
+        },
+    )
+
+
+@user_router.get("/config-bundle/public-key", response_class=PlainTextResponse)
+async def get_config_bundle_public_key() -> str:
+    return get_public_key_pem()
+
     
 # Exemple d'utilisation dans une route
 @user_router.post("/login")
@@ -46,14 +91,16 @@ async def login(
     # Authenticate user
     try:
         token = keycloak_openid.token(username, password)
+        payload = await decode_token(token["access_token"])
+        user = build_user_from_payload(payload)
         logger.info(f"User {username} authenticated successfully.")
-        logger.info(f"Access token: {token['access_token']}")
         return JSONResponse (
             content={
                 "access_token": token["access_token"],
                 "token_type": "bearer",
                 "refresh_token": token["refresh_token"],
-                "expires_in": token["expires_in"]
+                "expires_in": token["expires_in"],
+                "user": user.model_dump(),
             },
             status_code=200
         )
@@ -64,13 +111,6 @@ async def login(
     
     
     
-    token = await get_token_with_credentials(username, password)
-    return {
-        "access_token": token["access_token"],
-        "token_type": "bearer",
-        "refresh_token": token["refresh_token"]
-    }
-
 @user_router.post("/token/refresh")
 async def refresh_token(refresh_token: Annotated[str, Form()]):
     try:
@@ -104,52 +144,15 @@ async def validate_token(token: Annotated[str, Form()]):
     - JSON response with token validity and details.
     """
     try:
-        keycloak_service = KeycloakService()
-        
-        # Keycloak introspect URL
-        introspect_url = f"{keycloak_service.keycloak_url}/realms/{keycloak_service.realm}/protocol/openid-connect/token/introspect"
-        logger.info(f"Keycloak introspect URL: {introspect_url}")
-
-        # Payload for introspection
-        payload = {
-            "token": token,
-            "client_id": keycloak_service.client_id,
-            "client_secret": keycloak_service.client_secret
-        }
-        logger.info(f"Payload being sent to Keycloak: {payload}")
-
-        # Sending request to Keycloak
-        logger.info("Sending request to Keycloak introspect endpoint...")
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(introspect_url, data=payload)
-        
-        # Handling response
-        logger.info(f"Received response from Keycloak with status code: {response.status_code}")
-        if response.status_code != 200:
-            logger.error("Error communicating with Keycloak.")
-            logger.error(f"Response body: {response.text}")
-            raise HTTPException(status_code=403, detail="Error communicating with Keycloak")
-        
-        # Parse response
-        token_data = response.json()
-        logger.info(f"Token introspection response: {token_data}")
-
-        # Check token validity
-        if not token_data.get("active", False):
-            logger.warning("Token is not active.")
-            return {"valid": False, "message": "Token is invalid or expired"}
-        
-        logger.info("Token is valid.")
+        payload = await decode_token(token)
+        user = build_user_from_payload(payload)
         return {
             "valid": True,
-            "token_data": token_data
+            "user": user.model_dump(),
         }
-    except httpx.RequestError as e:
-        logger.error(f"HTTP Request to Keycloak failed: {str(e)}")
-        raise HTTPException(500, f"Failed to connect to Keycloak: {str(e)}")
     except Exception as e:
         logger.error(f"An unexpected error occurred: {str(e)}", exc_info=True)
-        raise HTTPException(500, f"Unexpected error: {str(e)}")
+        return {"valid": False, "message": str(e)}
     
 @user_router.get('/privacy', response_class = HTMLResponse)
 async def privacy_policy() -> HTMLResponse:

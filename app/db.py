@@ -139,6 +139,8 @@ class Episode(Model):
     patient_id: str = Field(...)
     manufacturer: Manufacturer
     episode_type: str = Field(...)
+    center: Optional[str] = Field(default=None)
+    projects: List[str] = Field(default_factory=list)
     age_at_episode: int
     episode_duration: str = Field(...)
     implant_model: Optional[str] = Field(default=None)
@@ -163,6 +165,7 @@ class ScrapedEpisode(Model):
     age_at_episode: Union[int, str]
     episode_duration: str = Field(...)
     center: str = Field(...)
+    projects: List[str] = Field(default_factory=list)
     implant_model: Optional[str] = Field(default=None)
 
     # <— ici tu veux que ce soit requis : on prend l’alias 'EGM_required'
@@ -215,6 +218,17 @@ class ProcessingTimeForEpisode(Model):
         "collection": "processing_times"
     }
 
+
+class CenterPepper(Model):
+    center: str = Field(...)
+    pepper_hash: str = Field(...)
+    created_by: Optional[str] = Field(default=None)
+    created_at: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
+
+    model_config = {
+        "collection": "peppers"
+    }
+
 class TokenData(BaseModel):
     username: Optional[str] = None
     token: Optional[str] = None
@@ -229,9 +243,14 @@ class User(BaseModel):
     email: Optional[str]
     first_name: Optional[str]
     last_name: Optional[str]
-    realm_roles: list
-    client_roles: list
-    groups: list
+    realm_roles: List[str]
+    client_roles: List[str]
+    roles: List[str]
+    groups: List[str]
+    centers: List[str]
+    projects: List[str]
+    primary_center: Optional[str] = None
+    user_type: Optional[str] = None
 
 class AIModel(BaseModel):
     client_id: str= Field(..., description="Client ID of the AI model")

@@ -1,7 +1,14 @@
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, Body, Form, File, Query
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, Body, Form, File, Query, Request
 from fastapi.responses import JSONResponse, FileResponse
 from pymongo.errors import DuplicateKeyError
-from auth import get_user_info, get_auth_info, check_authorization
+from auth import (
+    check_authorization,
+    ensure_center_pepper_binding,
+    ensure_resource_access,
+    get_episode_access_query,
+    parse_projects,
+    resolve_user_center,
+)
 import httpx
 from db import engine, Episode, ScrapedEpisode, Annotation, Job, JobStatus, Manufacturer, UserType, ProcessingTimeForEpisode, User, AIJob, EpisodeInfo
 from typing import List, Annotated, Dict, Optional, Union
@@ -41,6 +48,20 @@ annotation_router = APIRouter(
     tags=["Annotation Management"]
 )
 
+
+async def resolve_episode_scope(episode: Episode | ScrapedEpisode) -> tuple[Optional[str], list[str]]:
+    center = getattr(episode, "center", None)
+    projects = list(getattr(episode, "projects", []) or [])
+
+    if center:
+        return center, projects
+
+    scraped_episode = await engine.find_one(ScrapedEpisode, ScrapedEpisode.episode_id == episode.episode_id)
+    if scraped_episode:
+        return scraped_episode.center, list(getattr(scraped_episode, "projects", []) or [])
+
+    return None, projects
+
 ''' Routes for episode handling '''
 
 @episode_router.get("/search")
@@ -60,7 +81,7 @@ async def search(
     Recherche des épisodes en fonction de plusieurs critères avec pagination et tri.
     """
     try:
-        query = {}
+        query: Dict[str, object] = {}
 
         # Recherche dans les champs principaux
         if episode_id:
@@ -86,6 +107,10 @@ async def search(
         valid_sort_fields = ["episode_id", "patient_id", "episode_type", "manufacturer", "age_at_episode", "episode_duration"]
         if sort_by not in valid_sort_fields:
             raise HTTPException(status_code=400, detail=f"Invalid sort_by field. Must be one of: {', '.join(valid_sort_fields)}")
+
+        scope_query = get_episode_access_query(rights)
+        if scope_query:
+            query = {"$and": [query, scope_query]} if query else scope_query
 
         # Exécuter la requête avec tri
         cursor = (
@@ -175,6 +200,7 @@ async def send_to_ai(manufacturer: str, episode_type: str, episode_id: str, jobs
 
 @episode_router.post("/upload_episode")
 async def upload_episode(
+    request: Request,
     rights= Annotated[User, Depends(check_authorization("create-episode"))],
     patient_id: str = Form(...),
     manufacturer: str = Form(...),
@@ -182,14 +208,34 @@ async def upload_episode(
     age_at_episode: int = Form(...),
     implant_model: str = Form(...),  # Champ à remplir si nécessaire
     episode_duration: str = Form(...),  # Correction du type de episode_duration
-    episode_id: str = Form(...)
+    episode_id: str = Form(...),
+    center: Optional[str] = Form(None),
+    projects: Optional[str] = Form(None),
 ) -> JSONResponse:
     try:
         jobs = []
+        resolved_center = resolve_user_center(rights, center)
+        await ensure_center_pepper_binding(request, resolved_center)
+        resolved_projects = parse_projects(projects)
+
         # Vérifier si l'épisode existe déjà
         existing_episode = await engine.find_one(Episode, Episode.episode_id == episode_id)
         
         if existing_episode:
+            existing_center, existing_projects = await resolve_episode_scope(existing_episode)
+            if existing_episode.center is None:
+                existing_episode.center = resolved_center
+                if resolved_projects and not existing_episode.projects:
+                    existing_episode.projects = resolved_projects
+                await engine.save(existing_episode)
+                existing_center = existing_episode.center
+                existing_projects = existing_episode.projects
+
+            ensure_resource_access(
+                rights,
+                center=existing_center,
+                projects=existing_projects,
+            )
             logger.info(f"Episode {episode_id} déjà existant")
             diagnosis_service = DiagnosisService(engine)
             labels = await diagnosis_service.get_possible_labels(
@@ -204,6 +250,8 @@ async def upload_episode(
                     "patient_id": existing_episode.patient_id,
                     "manufacturer": existing_episode.manufacturer,
                     "episode_type": existing_episode.episode_type,
+                    "center": existing_episode.center,
+                    "projects": existing_episode.projects,
                     "implant_model": existing_episode.implant_model,
                     "labels": labels,
                     "exists": True,
@@ -222,6 +270,8 @@ async def upload_episode(
             patient_id=patient_id,
             manufacturer=manufacturer_enum,
             episode_type=episode_type,
+            center=resolved_center,
+            projects=resolved_projects,
             implant_model=implant_model,  # Champ à remplir si nécessaire
             age_at_episode=age_at_episode,
             episode_duration=episode_duration,
@@ -244,6 +294,8 @@ async def upload_episode(
                 "patient_id": episode.patient_id,
                 "implant_model": episode.implant_model,
                 "age_at_episode": episode.age_at_episode,
+                "center": episode.center,
+                "projects": episode.projects,
                 "manufacturer": episode.manufacturer,
                 "episode_type": episode.episode_type,
                 "labels": labels,
@@ -259,6 +311,7 @@ async def upload_episode(
 
 @episode_router.post("/scraping")
 async def scrape_episode(
+    request: Request,
     rights: Annotated[User, Depends(check_authorization("create-episode"))],
     patient_id: str = Form(...),
     manufacturer: str = Form(...),
@@ -267,7 +320,8 @@ async def scrape_episode(
     implant_model: str = Form(...),  # Champ à remplir si nécessaire
     episode_duration: str = Form(...),  # Correction du type de episode_duration
     episode_id: str = Form(...),
-    center: str = Form(...),
+    center: Optional[str] = Form(None),
+    projects: Optional[str] = Form(None),
     files: Optional[List[UploadFile]] = File(None)
 ) -> JSONResponse:
     
@@ -276,6 +330,9 @@ async def scrape_episode(
     
     # check for an existing entry in the scraping database
     t_0 = time.perf_counter()
+    resolved_center = resolve_user_center(rights, center)
+    await ensure_center_pepper_binding(request, resolved_center)
+    resolved_projects = parse_projects(projects)
 
     binary_files = None
     if files:
@@ -290,7 +347,8 @@ async def scrape_episode(
         age_at_episode=age_at_episode,
         implant_model=implant_model,
         episode_duration=episode_duration,
-        center=center,
+        center=resolved_center,
+        projects=resolved_projects,
         egm=binary_files,
     )
     entry_doc = entry.model_dump(by_alias=True, exclude_none=True)
@@ -320,7 +378,8 @@ async def scrape_episode(
             "age_at_episode": age_at_episode,
             "implant_model": implant_model,
             "episode_duration": episode_duration,
-            "center": center,
+            "center": resolved_center,
+            "projects": resolved_projects,
             "images_uploaded": True if status==201 else False,
             "created": created,
         },
@@ -339,6 +398,8 @@ async def get_episode_diagnostics(
         episode = await engine.find_one(Episode, Episode.episode_id == episode_id)
         if not episode:
             raise HTTPException(404, detail='No episode with this ID.')
+        center, projects = await resolve_episode_scope(episode)
+        ensure_resource_access(rights, center=center, projects=projects)
 
         # Obtenir les diagnostics basés sur le fabricant et le type d'épisode
         diagnosis_service = DiagnosisService(engine)
@@ -375,6 +436,8 @@ async def get_episode_by_id(
     episode = await engine.find_one(Episode, Episode.id == id)
     if episode is None:
         raise HTTPException(404, 'Episode not found for this id.')
+    center, projects = await resolve_episode_scope(episode)
+    ensure_resource_access(rights, center=center, projects=projects)
     return EpisodeInfo(**episode.model_dump())
 
 
@@ -387,6 +450,8 @@ async def delete_episode_by_id(
     episode = await engine.find_one(Episode, Episode.id == id)
     if episode is None:
         raise HTTPException(404, 'Episode not found for this id.')
+    center, projects = await resolve_episode_scope(episode)
+    ensure_resource_access(auth_info, center=center, projects=projects)
     await engine.delete(episode)
     return EpisodeInfo(**episode.model_dump())
 
@@ -496,7 +561,7 @@ async def post_processing_time(
     
     username = auth.username
     
-    user_type = auth.groups[1] if auth.groups else "unknown"
+    user_type = auth.user_type or "nurse"
     
     try:
         processing_time = float(processing_time)
@@ -567,6 +632,8 @@ async def get_episode_egm(
         episode = await engine.find_one(model, model.episode_id == episode_id)
         if not episode:
             raise HTTPException(404, detail='No episode with this ID.')
+        center, projects = await resolve_episode_scope(episode)
+        ensure_resource_access(auth, center=center, projects=projects)
         
         # Vérifier si l'EGM existe
         if not hasattr(episode, 'egm') or not episode.egm:
@@ -683,6 +750,8 @@ async def download_episode_egm_files(
         episode = await engine.find_one(model, model.episode_id == episode_id)
         if not episode:
             raise HTTPException(404, detail='No episode with this ID.')
+        center, projects = await resolve_episode_scope(episode)
+        ensure_resource_access(auth, center=center, projects=projects)
         
         # Vérifier si l'EGM existe
         if not hasattr(episode, 'egm') or not episode.egm:
@@ -803,6 +872,8 @@ async def post_episode_egm(
         if not episode:
             logger.error(f"Episode {episode_id} non trouvé")
             raise HTTPException(404, detail='No episode with this ID.')
+        center, projects = await resolve_episode_scope(episode)
+        ensure_resource_access(user, center=center, projects=projects)
         
         if len(files) == 1:
             # Si un seul fichier, on le traite comme un EGM unique
@@ -864,9 +935,10 @@ async def put_episode_annotation(
         if not episode:
             logger.error(f"Episode {episode_id} non trouvé")
             raise HTTPException(404, detail='No episode with this ID.')
+        center, projects = await resolve_episode_scope(episode)
+        ensure_resource_access(auth_info, center=center, projects=projects)
 
-        logger.info("user group: ", auth_info.groups )
-        group = auth_info.groups[1]
+        group = auth_info.user_type or "nurse"
         new_annotation = Annotation(
             user=auth_info.username,
             user_type=UserType(group),  
