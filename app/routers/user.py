@@ -5,7 +5,11 @@ from typing import Annotated
 from db import Center, UserType, UserEntry, User
 from fastapi import Form
 from fastapi.responses import PlainTextResponse
-from services.config_bundle_service import build_signed_center_bundle, get_public_key_pem
+from services.config_bundle_service import (
+    build_signed_center_bundle,
+    ensure_bundle_signing_is_configured,
+    get_public_key_pem,
+)
 from services.pepper_service import create_center_pepper
 from services.keycloak_service import create_new_user, reset_password
 import logging
@@ -46,10 +50,16 @@ def my_access(user: Annotated[User, Depends(check_authorization())]):
 @user_router.post("/centers/{center}/pepper")
 async def create_pepper_for_center(
     center: str,
+    pepper: str | None = None,
     api_url: str | None = None,
-    rights: User = Depends(check_authorization("pastec-admin"))
+    rights: User = Depends(check_authorization("admin"))
 ) -> Response:
-    record, pepper = await create_center_pepper(center=center, created_by=rights.username)
+    ensure_bundle_signing_is_configured()
+    record, pepper, created = await create_center_pepper(
+        center=center,
+        created_by=rights.username,
+        pepper=pepper,
+    )
     bundle = build_signed_center_bundle(
         center=record.center,
         pepper=pepper,
@@ -60,7 +70,7 @@ async def create_pepper_for_center(
     return Response(
         content=json.dumps(bundle, sort_keys=True, indent=2),
         media_type="application/json",
-        status_code=201,
+        status_code=201 if created else 200,
         headers={
             "Content-Disposition": f'attachment; filename="{bundle_filename}"',
             "X-PASTEC-Center": record.center,

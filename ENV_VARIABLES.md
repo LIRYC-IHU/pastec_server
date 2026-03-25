@@ -65,13 +65,13 @@ Ce document décrit toutes les variables d'environnement nécessaires au bon fon
 - **Description**: Secret du client Keycloak
 - **Requis**: ✅ **OUI - SENSIBLE** 🔒
 - **Exemple**: `dsaImyh0BaQyMiLcaGwhN5ZidUqLz3Lj`
-- **Note**: À générer depuis la console Keycloak. **NE JAMAIS COMMITTER**
+- **Note**: À générer depuis la console Keycloak. **NE JAMAIS COMMITTER**. Cette variable concerne le client backend/admin si vous utilisez un client confidentiel. Les clients Chrome `pastec_plugin_dev` et `pastec_plugin_prod` restent des clients publics PKCE et n'utilisent pas de secret.
 
 ### `KEYCLOAK_ADMIN_CLIENT_SECRET`
 - **Description**: Secret du client admin Keycloak
 - **Requis**: ✅ **OUI - SENSIBLE** 🔒
 - **Exemple**: `DGrODPab1F5nQAS1ojAOlsMpXvUUwG8T`
-- **Note**: Utilisé pour les opérations administratives. **NE JAMAIS COMMITTER**
+- **Note**: Utilisé pour les opérations administratives si vous utilisez un client admin confidentiel. **NE JAMAIS COMMITTER**
 
 ### `KEYCLOAK_ADMIN`
 - **Description**: Nom d'utilisateur de l'administrateur Keycloak
@@ -139,7 +139,7 @@ Ce document décrit toutes les variables d'environnement nécessaires au bon fon
 - **Description**: Mot de passe PostgreSQL
 - **Requis**: ✅ **OUI - SENSIBLE** 🔒
 - **Exemple**: `password`
-- **Note**: **NE JAMAIS COMMITTER**
+- **Note**: **NE JAMAIS COMMITTER**. Si la base PostgreSQL existe déjà, modifier cette valeur dans `.env` ne change pas automatiquement le mot de passe stocké dans PostgreSQL. Il faut aussi mettre à jour le mot de passe du rôle dans la base.
 
 ---
 
@@ -160,22 +160,16 @@ Ce document décrit toutes les variables d'environnement nécessaires au bon fon
 
 ## Sécurité
 
-### `JWT_PEPPER`
-- **Description**: Clé secrète pour le hachage des tokens JWT
-- **Requis**: Recommandé - **SENSIBLE** 🔒
-- **Exemple**: `dev-pepper-changeme-random-string`
-- **Note**: Chaîne aléatoire forte. **NE JAMAIS COMMITTER**
-- **Génération**: `openssl rand -hex 32`
-
 ### `CONFIG_BUNDLE_SIGNING_PRIVATE_KEY`
 - **Description**: Clé privée PEM utilisée pour signer les bundles de configuration centre remis aux utilisateurs.
 - **Requis**: ✅ **OUI** si vous utilisez le provisionnement par bundle signé
 - **Note**: À conserver côté backend uniquement. Le backend ne conserve pas le pepper brut après génération; il signe simplement le bundle remis une seule fois à l'admin local.
+- **Format recommandé dans `.env`**: PEM sur une seule ligne avec des `\n` échappés.
 
 ### `CONFIG_BUNDLE_SIGNING_PUBLIC_KEY`
 - **Description**: Clé publique PEM associée, utilisée pour exposer la clé de vérification des bundles.
 - **Requis**: Non si elle peut être dérivée de la clé privée
-- **Note**: Peut être fournie explicitement pour éviter toute ambiguïté opérationnelle.
+- **Note**: Peut être fournie explicitement pour éviter toute ambiguïté opérationnelle. Même format `.env` que la clé privée.
 
 ### `AUTH_CENTER_GROUP_PREFIX`
 - **Description**: Préfixe de groupe Keycloak interprété comme un rattachement centre.
@@ -254,6 +248,10 @@ nano .env.prod
 # 3. Lancer avec Docker Compose
 docker-compose --env-file .env.prod up -d
 ```
+
+### Important
+
+Le projet utilise à la fois `env_file:` et l'interpolation `${VAR}` dans les fichiers Compose. Pour cette raison, il faut lancer Compose avec `--env-file` afin que les variables utilisées dans le YAML lui-même soient correctement résolues.
 
 ---
 

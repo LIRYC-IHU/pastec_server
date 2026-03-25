@@ -22,8 +22,21 @@ def _canonical_json(data: dict[str, Any]) -> bytes:
     return json.dumps(data, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
+def _normalize_pem_env_value(raw_value: str) -> str:
+    normalized = raw_value.strip()
+    if (
+        len(normalized) >= 2
+        and normalized[0] == normalized[-1]
+        and normalized[0] in {"'", '"'}
+    ):
+        normalized = normalized[1:-1]
+    return normalized.replace("\\n", "\n")
+
+
 def _load_private_key() -> RSAPrivateKey:
-    raw_key = os.getenv("CONFIG_BUNDLE_SIGNING_PRIVATE_KEY", "").strip()
+    raw_key = _normalize_pem_env_value(
+        os.getenv("CONFIG_BUNDLE_SIGNING_PRIVATE_KEY", "")
+    )
     if not raw_key:
         raise HTTPException(
             status_code=500,
@@ -42,7 +55,9 @@ def _load_private_key() -> RSAPrivateKey:
 
 
 def _load_public_key() -> RSAPublicKey:
-    raw_key = os.getenv("CONFIG_BUNDLE_SIGNING_PUBLIC_KEY", "").strip()
+    raw_key = _normalize_pem_env_value(
+        os.getenv("CONFIG_BUNDLE_SIGNING_PUBLIC_KEY", "")
+    )
     if raw_key:
         try:
             return serialization.load_pem_public_key(raw_key.encode("utf-8"))
@@ -61,6 +76,10 @@ def get_public_key_pem() -> str:
         encoding=serialization.Encoding.PEM,
         format=serialization.PublicFormat.SubjectPublicKeyInfo,
     ).decode("utf-8")
+
+
+def ensure_bundle_signing_is_configured() -> None:
+    _load_private_key()
 
 
 def build_signed_center_bundle(

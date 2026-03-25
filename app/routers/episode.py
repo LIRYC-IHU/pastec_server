@@ -201,7 +201,7 @@ async def send_to_ai(manufacturer: str, episode_type: str, episode_id: str, jobs
 @episode_router.post("/upload_episode")
 async def upload_episode(
     request: Request,
-    rights= Annotated[User, Depends(check_authorization("create-episode"))],
+    rights: Annotated[User, Depends(check_authorization("create-episode"))],
     patient_id: str = Form(...),
     manufacturer: str = Form(...),
     episode_type: str = Form(...),
